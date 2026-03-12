@@ -1,0 +1,13 @@
+node_modules/
+printers.json
+dist/
+build/
+.DS_Store
+
+# Tauri build output
+src-tauri/target/
+
+# .NET build output
+src-native/EDPrintTool/bin/
+src-native/EDPrintTool/obj/
+publish/

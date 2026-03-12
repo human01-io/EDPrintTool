@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EDPrintTool</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --accent: #4f8cff;
+      --accent-hover: #6ba0ff;
+      --green: #34d399;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --text: #e4e4e7;
+      --muted: #71717a;
+      --radius: 8px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.5px; }
+    header h1 span { color: var(--accent); }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block; margin-right: 6px;
+    }
+    .status-dot.connected { background: var(--green); }
+    .status-dot.disconnected { background: var(--red); }
+    .status-badge { display: flex; align-items: center; font-size: 13px; color: var(--muted); }
+    main { max-width: 1000px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 15px; font-weight: 600; margin-bottom: 16px;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 140px; }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    input, select, textarea {
+      width: 100%; padding: 8px 12px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text);
+      font-size: 14px; font-family: inherit; outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px; resize: vertical; min-height: 140px;
+    }
+    button {
+      padding: 8px 18px; border: none; border-radius: var(--radius);
+      font-size: 14px; font-weight: 500; cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-secondary:hover:not(:disabled) { background: #363949; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-danger { background: transparent; color: var(--red); border: 1px solid var(--red); padding: 4px 10px; font-size: 12px; }
+    .btn-danger:hover { background: rgba(248,113,113,0.1); }
+    .btn-success { background: transparent; color: var(--green); border: 1px solid var(--green); padding: 4px 10px; font-size: 12px; }
+    .btn-success:hover { background: rgba(52,211,153,0.1); }
+    .btn-outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 4px 10px; font-size: 12px; }
+    .btn-outline:hover { background: rgba(79,140,255,0.1); }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    .printer-list { display: flex; flex-direction: column; gap: 8px; }
+    .printer-item {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .printer-item .pi-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+    }
+    .printer-item .info { display: flex; flex-direction: column; gap: 2px; }
+    .printer-item .info .name { font-weight: 500; font-size: 14px; }
+    .printer-item .info .detail { font-size: 12px; color: var(--muted); }
+    .printer-item .btns { display: flex; gap: 6px; align-items: center; }
+    .settings-panel {
+      border-top: 1px solid var(--border);
+      padding: 16px;
+      background: rgba(0,0,0,0.2);
+      display: none;
+    }
+    .settings-panel.open { display: block; }
+    .settings-panel .row { margin-bottom: 12px; }
+    .settings-panel .row:last-child { margin-bottom: 0; }
+    .discover-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+    .discover-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); font-size: 13px;
+    }
+    .discover-item .dname { font-weight: 500; }
+    .discover-item .ddriver { color: var(--muted); font-size: 12px; }
+    .log {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px; max-height: 200px; overflow-y: auto; color: var(--muted);
+    }
+    .log .entry { padding: 2px 0; }
+    .log .entry.success { color: var(--green); }
+    .log .entry.error { color: var(--red); }
+    .log .entry .ts { color: #52525b; margin-right: 8px; }
+    .empty { text-align: center; color: var(--muted); padding: 24px; font-size: 14px; }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tab {
+      padding: 8px 16px; background: none; border: none;
+      border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font-size: 13px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .hint {
+      background: rgba(79,140,255,0.08); border: 1px solid rgba(79,140,255,0.2);
+      border-radius: var(--radius); padding: 12px 16px; font-size: 13px;
+      color: var(--muted); line-height: 1.5;
+    }
+    .hint strong { color: var(--text); }
+    .setting-label { font-size: 11px; color: var(--muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .copies-input { width: 60px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>ED</span>PrintTool</h1>
+    <div class="status-badge">
+      <span class="status-dot disconnected" id="ws-status"></span>
+      <span id="ws-label">Disconnected</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Add Printer -->
+    <div class="card">
+      <h2>Add Printer</h2>
+      <div class="tabs">
+        <button class="tab" data-type="network" onclick="switchType('network')">Network (TCP)</button>
+        <button class="tab active" data-type="usb" onclick="switchType('usb')">USB (Windows)</button>
+      </div>
+      <div id="usb-fields">
+        <div class="hint" style="margin-bottom:12px">
+          Click <strong>Discover Printers</strong> to find your Zebra, then click <strong>+ Add</strong> next to it.
+          The printer must be installed in Windows and use the <strong>Generic / Text Only</strong> or <strong>ZDesigner</strong> driver.
+        </div>
+        <div class="row">
+          <div><label>Friendly Name</label><input type="text" id="p-name" placeholder="e.g. Warehouse Label Printer"></div>
+          <div><label>Windows Printer Name (exact)</label><input type="text" id="p-win" placeholder="e.g. ZDesigner ZD420-203dpi ZPL"></div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" onclick="addPrinter()">Add Printer</button>
+          <button class="btn-secondary" onclick="discoverPrinters()">Discover Printers</button>
+        </div>
+        <div id="discover-results"></div>
+      </div>
+      <div id="network-fields" style="display:none">
+        <div class="row">
+          <div><label>Printer Name</label><input type="text" id="p-name-net" placeholder="e.g. Warehouse Label Printer"></div>
+          <div><label>IP Address</label><input type="text" id="p-host" placeholder="e.g. 192.168.1.50"></div>
+          <div style="flex:0 0 100px"><label>Port</label><input type="number" id="p-port" value="9100"></div>
+        </div>
+        <div class="actions"><button class="btn-primary" onclick="addNetworkPrinter()">Add Printer</button></div>
+      </div>
+    </div>
+
+    <!-- Printer List + Settings -->
+    <div class="card">
+      <h2>Configured Printers</h2>
+      <div id="printer-list" class="printer-list">
+        <div class="empty">No printers configured yet</div>
+      </div>
+    </div>
+
+    <!-- Print ZPL -->
+    <div class="card">
+      <h2>Print ZPL</h2>
+      <div class="row">
+        <div style="flex:0 0 250px">
+          <label>Target Printer</label>
+          <select id="print-target"></select>
+          <div style="margin-top:8px">
+            <label>Copies</label>
+            <input type="number" id="print-copies" class="copies-input" value="1" min="1" max="100">
+          </div>
+        </div>
+        <div style="flex:1">
+          <label>ZPL Code</label>
+          <textarea id="zpl-input" placeholder="^XA&#10;^FO50,50^ADN,36,20^FDHello World^FS&#10;^XZ"></textarea>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" onclick="printLabel()">Print Label</button>
+        <button class="btn-secondary" onclick="loadSample()">Load Sample ZPL</button>
+      </div>
+    </div>
+
+    <!-- Quick Print -->
+    <div class="card">
+      <h2>Quick Print (Direct IP)</h2>
+      <div class="row">
+        <div><label>IP Address</label><input type="text" id="qp-host" placeholder="192.168.1.50"></div>
+        <div style="flex:0 0 100px"><label>Port</label><input type="number" id="qp-port" value="9100"></div>
+        <div style="flex:2"><label>ZPL Code</label><textarea id="qp-zpl" rows="3" placeholder="^XA^FO50,50^ADN,36,20^FDTest^FS^XZ"></textarea></div>
+      </div>
+      <div class="actions"><button class="btn-primary" onclick="quickPrint()">Send to Printer</button></div>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+      <h2>Activity Log</h2>
+      <div id="log" class="log">
+        <div class="entry"><span class="ts">--:--:--</span>Waiting for activity...</div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const WS_URL = `ws://${location.hostname || 'localhost'}:${location.port || 8189}`;
+    const API = `http://${location.hostname || 'localhost'}:${location.port || 8189}/api`;
+    let ws;
+    let currentType = 'usb';
+    let labelPresets = [];
+    let printerCache = [];
+
+    // ─── WebSocket ───────────────────────────────
+    function connectWS() {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => {
+        document.getElementById('ws-status').className = 'status-dot connected';
+        document.getElementById('ws-label').textContent = 'Connected';
+        log('WebSocket connected', 'success');
+      };
+      ws.onclose = () => {
+        document.getElementById('ws-status').className = 'status-dot disconnected';
+        document.getElementById('ws-label').textContent = 'Disconnected';
+        setTimeout(connectWS, 3000);
+      };
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.success) {
+          log(`Response: ${JSON.stringify(msg.data).slice(0, 200)}`, 'success');
+        } else {
+          log(`Error: ${msg.error}`, 'error');
+        }
+      };
+    }
+
+    // ─── Logging ─────────────────────────────────
+    function log(text, cls = '') {
+      const el = document.getElementById('log');
+      const ts = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = `entry ${cls}`;
+      div.innerHTML = `<span class="ts">${ts}</span>${escapeHtml(text)}`;
+      el.prepend(div);
+    }
+    function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+    function escapeAttr(str) { return str.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+    // ─── Tabs ────────────────────────────────────
+    function switchType(type) {
+      currentType = type;
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.type === type));
+      document.getElementById('usb-fields').style.display = type === 'usb' ? '' : 'none';
+      document.getElementById('network-fields').style.display = type === 'network' ? '' : 'none';
+    }
+
+    // ─── Load label presets ──────────────────────
+    async function loadPresets() {
+      try {
+        const res = await fetch(`${API}/label-presets`);
+        labelPresets = await res.json();
+      } catch { labelPresets = []; }
+    }
+
+    function presetOptions(selectedId) {
+      return labelPresets.map(p =>
+        `<option value="${p.id}" ${p.id === selectedId ? 'selected' : ''}>${p.desc} (${p.id})</option>`
+      ).join('') + `<option value="custom" ${selectedId === 'custom' ? 'selected' : ''}>Custom</option>`;
+    }
+
+    // ─── Add Printers ────────────────────────────
+    async function addPrinter() {
+      const name = document.getElementById('p-name').value.trim();
+      const winPrinter = document.getElementById('p-win').value.trim();
+      if (!name) return log('Printer name is required', 'error');
+      if (!winPrinter) return log('Windows printer name is required', 'error');
+      await postPrinter({ name, type: 'usb', windowsPrinter: winPrinter });
+      document.getElementById('p-name').value = '';
+      document.getElementById('p-win').value = '';
+    }
+
+    async function addNetworkPrinter() {
+      const name = document.getElementById('p-name-net').value.trim();
+      const host = document.getElementById('p-host').value.trim();
+      const port = parseInt(document.getElementById('p-port').value) || 9100;
+      if (!name) return log('Printer name is required', 'error');
+      if (!host) return log('IP address is required', 'error');
+      await postPrinter({ name, type: 'network', host, port });
+      document.getElementById('p-name-net').value = '';
+      document.getElementById('p-host').value = '';
+    }
+
+    async function autoAddPrinter(winName) {
+      await postPrinter({ name: winName, type: 'usb', windowsPrinter: winName });
+    }
+
+    async function postPrinter(body) {
+      try {
+        const res = await fetch(`${API}/printers`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (res.ok) { log(`Printer added: ${data.name} (${data.id})`, 'success'); refreshPrinters(); }
+        else { log(`Failed: ${data.error}`, 'error'); }
+      } catch (err) { log(`Request failed: ${err.message}`, 'error'); }
+    }
+
+    // ─── Discover ────────────────────────────────
+    async function discoverPrinters() {
+      log('Discovering printers...');
+      try {
+        const res = await fetch(`${API}/printers/discover`);
+        const list = await res.json();
+        if (!list || list.length === 0) {
+          log('No printers found', 'error');
+          document.getElementById('discover-results').innerHTML = '<div class="empty" style="padding:12px">No printers detected.</div>';
+          return;
+        }
+        log(`Found ${list.length} printer(s)`, 'success');
+        document.getElementById('discover-results').innerHTML = `<div class="discover-list">${list.map(p => `
+          <div class="discover-item">
+            <div>
+              <span class="dname">${escapeHtml(p.name)}</span>
+              ${p.driver ? `<br><span class="ddriver">${escapeHtml(p.driver)}</span>` : ''}
+            </div>
+            <button class="btn-success" onclick="autoAddPrinter('${escapeAttr(p.name)}')">+ Add</button>
+          </div>
+        `).join('')}</div>`;
+      } catch (err) { log(`Discovery failed: ${err.message}`, 'error'); }
+    }
+
+    // ─── Refresh Printers ────────────────────────
+    async function refreshPrinters() {
+      try {
+        const res = await fetch(`${API}/printers`);
+        printerCache = await res.json();
+        const container = document.getElementById('printer-list');
+        const select = document.getElementById('print-target');
+
+        if (printerCache.length === 0) {
+          container.innerHTML = '<div class="empty">No printers configured yet</div>';
+          select.innerHTML = '';
+          return;
+        }
+
+        container.innerHTML = printerCache.map(p => {
+          const s = p.settings || {};
+          let detail = '';
+          if (p.type === 'network') detail = `${p.host}:${p.port} (network)`;
+          else if (p.windowsPrinter) detail = `${p.windowsPrinter} (USB/Windows)`;
+          else if (p.cupsQueue) detail = `${p.cupsQueue} (CUPS)`;
+
+          const presetLabel = s.labelPreset && s.labelPreset !== 'custom'
+            ? labelPresets.find(lp => lp.id === s.labelPreset)?.desc || s.labelPreset
+            : `${s.widthDots}x${s.heightDots} dots`;
+
+          return `
+            <div class="printer-item" id="pi-${p.id}">
+              <div class="pi-header">
+                <div class="info">
+                  <span class="name">${escapeHtml(p.name)}</span>
+                  <span class="detail">${escapeHtml(detail)} &mdash; ${escapeHtml(presetLabel)}, darkness ${s.darkness || '?'}, speed ${s.speed || '?'}</span>
+                </div>
+                <div class="btns">
+                  <button class="btn-outline btn-sm" onclick="toggleSettings('${p.id}')">Settings</button>
+                  <button class="btn-danger btn-sm" onclick="removePrinter('${p.id}')">Remove</button>
+                </div>
+              </div>
+              <div class="settings-panel" id="sp-${p.id}">
+                <div class="row">
+                  <div>
+                    <label>Label Size Preset</label>
+                    <select onchange="onPresetChange('${p.id}', this.value)" id="sel-preset-${p.id}">
+                      ${presetOptions(s.labelPreset || '4x6')}
+                    </select>
+                  </div>
+                  <div>
+                    <label>Width (dots)</label>
+                    <input type="number" id="set-w-${p.id}" value="${s.widthDots || 812}" ${s.labelPreset !== 'custom' ? 'disabled' : ''}>
+                  </div>
+                  <div>
+                    <label>Height (dots)</label>
+                    <input type="number" id="set-h-${p.id}" value="${s.heightDots || 1218}" ${s.labelPreset !== 'custom' ? 'disabled' : ''}>
+                  </div>
+                  <div style="flex:0 0 80px">
+                    <label>DPI</label>
+                    <select id="set-dpi-${p.id}">
+                      <option value="203" ${s.dpi == 203 ? 'selected' : ''}>203</option>
+                      <option value="300" ${s.dpi == 300 ? 'selected' : ''}>300</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="row">
+                  <div>
+                    <label>Darkness (0-30)</label>
+                    <input type="range" id="set-dark-${p.id}" min="0" max="30" value="${s.darkness || 15}" oninput="document.getElementById('dark-val-${p.id}').textContent=this.value" style="padding:4px 0">
+                    <span style="font-size:12px;color:var(--muted)" id="dark-val-${p.id}">${s.darkness || 15}</span>
+                  </div>
+                  <div>
+                    <label>Speed (in/sec, 2-14)</label>
+                    <input type="number" id="set-speed-${p.id}" value="${s.speed || 4}" min="2" max="14">
+                  </div>
+                  <div>
+                    <label>Media Type</label>
+                    <select id="set-media-${p.id}">
+                      <option value="D" ${s.mediaType === 'D' ? 'selected' : ''}>Direct Thermal</option>
+                      <option value="T" ${s.mediaType === 'T' ? 'selected' : ''}>Thermal Transfer</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Print Mode</label>
+                    <select id="set-mode-${p.id}">
+                      <option value="T" ${s.printMode === 'T' ? 'selected' : ''}>Tear-Off</option>
+                      <option value="P" ${s.printMode === 'P' ? 'selected' : ''}>Peel-Off</option>
+                      <option value="C" ${s.printMode === 'C' ? 'selected' : ''}>Cutter</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>Orientation</label>
+                    <select id="set-orient-${p.id}">
+                      <option value="N" ${s.orientation === 'N' ? 'selected' : ''}>Normal</option>
+                      <option value="R" ${s.orientation === 'R' ? 'selected' : ''}>Rotated 90</option>
+                      <option value="I" ${s.orientation === 'I' ? 'selected' : ''}>Inverted 180</option>
+                      <option value="B" ${s.orientation === 'B' ? 'selected' : ''}>Bottom-Up 270</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button class="btn-primary btn-sm" onclick="saveSettings('${p.id}')">Save Settings</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        select.innerHTML = printerCache.map(p =>
+          `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+        ).join('');
+      } catch (err) { log(`Failed to refresh printers: ${err.message}`, 'error'); }
+    }
+
+    // ─── Settings Panel ──────────────────────────
+    function toggleSettings(id) {
+      const el = document.getElementById(`sp-${id}`);
+      el.classList.toggle('open');
+    }
+
+    function onPresetChange(id, val) {
+      const isCustom = val === 'custom';
+      document.getElementById(`set-w-${id}`).disabled = !isCustom;
+      document.getElementById(`set-h-${id}`).disabled = !isCustom;
+      if (!isCustom) {
+        const preset = labelPresets.find(p => p.id === val);
+        if (preset) {
+          document.getElementById(`set-w-${id}`).value = preset.widthDots;
+          document.getElementById(`set-h-${id}`).value = preset.heightDots;
+        }
+      }
+    }
+
+    async function saveSettings(id) {
+      const settings = {
+        labelPreset: document.getElementById(`sel-preset-${id}`).value,
+        widthDots: parseInt(document.getElementById(`set-w-${id}`).value),
+        heightDots: parseInt(document.getElementById(`set-h-${id}`).value),
+        dpi: parseInt(document.getElementById(`set-dpi-${id}`).value),
+        darkness: parseInt(document.getElementById(`set-dark-${id}`).value),
+        speed: parseInt(document.getElementById(`set-speed-${id}`).value),
+        mediaType: document.getElementById(`set-media-${id}`).value,
+        printMode: document.getElementById(`set-mode-${id}`).value,
+        orientation: document.getElementById(`set-orient-${id}`).value,
+      };
+      try {
+        const res = await fetch(`${API}/printers/${encodeURIComponent(id)}/settings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        });
+        const data = await res.json();
+        if (res.ok) { log(`Settings saved for ${id}`, 'success'); refreshPrinters(); }
+        else { log(`Failed: ${data.error}`, 'error'); }
+      } catch (err) { log(`Save failed: ${err.message}`, 'error'); }
+    }
+
+    // ─── Remove / Print ──────────────────────────
+    async function removePrinter(id) {
+      try {
+        await fetch(`${API}/printers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+        log(`Printer removed: ${id}`, 'success');
+        refreshPrinters();
+      } catch (err) { log(`Remove failed: ${err.message}`, 'error'); }
+    }
+
+    async function printLabel() {
+      const printerId = document.getElementById('print-target').value;
+      const zpl = document.getElementById('zpl-input').value;
+      const copies = parseInt(document.getElementById('print-copies').value) || 1;
+      if (!printerId) return log('Select a printer first', 'error');
+      if (!zpl.trim()) return log('Enter ZPL code', 'error');
+      try {
+        const res = await fetch(`${API}/print/${encodeURIComponent(printerId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ zpl, copies }),
+        });
+        const data = await res.json();
+        if (data.success) log(`Print job sent (${copies}x) to ${printerId}`, 'success');
+        else log(`Print failed: ${data.error}`, 'error');
+      } catch (err) { log(`Print request failed: ${err.message}`, 'error'); }
+    }
+
+    async function quickPrint() {
+      const host = document.getElementById('qp-host').value.trim();
+      const port = parseInt(document.getElementById('qp-port').value) || 9100;
+      const zpl = document.getElementById('qp-zpl').value;
+      if (!host || !zpl.trim()) return log('IP and ZPL are required', 'error');
+      try {
+        const res = await fetch(`${API}/print-raw`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ host, port, zpl }),
+        });
+        const data = await res.json();
+        if (data.success) log(`Quick print sent to ${host}:${port}`, 'success');
+        else log(`Quick print failed: ${data.error}`, 'error');
+      } catch (err) { log(`Quick print failed: ${err.message}`, 'error'); }
+    }
+
+    function loadSample() {
+      document.getElementById('zpl-input').value =
+`^XA
+
+^FX --- Top section with company info ---
+^CF0,40
+^FO50,50^FDShipping Label^FS
+^CF0,25
+^FO50,100^FDEDPrintTool Demo^FS
+^FO50,130^FD123 Main Street^FS
+^FO50,160^FDNew York, NY 10001^FS
+
+^FX --- Bar Code ---
+^BY3,2,120
+^FO50,220^BC^FD1234567890^FS
+
+^FX --- Bottom section ---
+^CF0,30
+^FO50,380^FDShip To:^FS
+^CF0,25
+^FO50,420^FDJohn Doe^FS
+^FO50,450^FD456 Oak Avenue^FS
+^FO50,480^FDLos Angeles, CA 90001^FS
+
+^FX --- QR Code ---
+^FO400,380^BQN,2,5^FDMA,https://example.com^FS
+
+^XZ`;
+      log('Sample ZPL loaded', 'success');
+    }
+
+    // ─── Init ────────────────────────────────────
+    connectWS();
+    loadPresets().then(() => refreshPrinters());
+  </script>
+</body>
+</html>
