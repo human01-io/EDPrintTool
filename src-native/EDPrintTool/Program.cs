@@ -56,6 +56,13 @@ static class Program
         var mainForm = new MainForm(store, server);
         using var tray = new TrayIcon(mainForm);
 
+        // Check for updates in background after UI loads
+        mainForm.Shown += async (_, _) =>
+        {
+            await Task.Delay(2000); // Let the app settle
+            await UpdateChecker.CheckForUpdatesAsync();
+        };
+
         Application.Run(mainForm);
 
         server.Stop();
