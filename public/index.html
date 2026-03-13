@@ -243,6 +243,7 @@
     let ws;
     let currentType = 'usb';
     let labelPresets = [];
+    let printerProfiles = [];
     let printerCache = [];
 
     // ─── WebSocket ───────────────────────────────
@@ -294,6 +295,10 @@
         const res = await fetch(`${API}/label-presets`);
         labelPresets = await res.json();
       } catch { labelPresets = []; }
+      try {
+        const res = await fetch(`${API}/printer-profiles`);
+        printerProfiles = await res.json();
+      } catch { printerProfiles = [{ id: 'generic', name: 'Generic ESC/POS' }]; }
     }
 
     function presetOptions(selectedId) {
@@ -474,6 +479,12 @@
                 <!-- ESC/POS Settings -->
                 <div id="escpos-settings-${p.id}" style="${s.language === 'ESC/POS' ? '' : 'display:none'}">
                   <div class="row">
+                    <div style="flex:0 0 180px">
+                      <label>Printer Profile</label>
+                      <select id="set-profile-${p.id}">
+                        ${printerProfiles.map(pr => `<option value="${pr.id}" ${(s.printerProfile || 'generic') === pr.id ? 'selected' : ''}>${pr.name}</option>`).join('')}
+                      </select>
+                    </div>
                     <div style="flex:0 0 140px">
                       <label>Paper Width</label>
                       <select id="set-pw-${p.id}">
@@ -499,9 +510,23 @@
                       <label>Feed Lines</label>
                       <input type="number" id="set-feed-${p.id}" value="${s.feedLines != null ? s.feedLines : 4}" min="0" max="20">
                     </div>
+                    <div style="flex:0 0 160px">
+                      <label>Code Page</label>
+                      <select id="set-codepage-${p.id}">
+                        <option value="" ${!s.codepage ? 'selected' : ''}>Printer Default</option>
+                        <option value="cp437" ${s.codepage === 'cp437' ? 'selected' : ''}>CP437 (US)</option>
+                        <option value="cp850" ${s.codepage === 'cp850' ? 'selected' : ''}>CP850 (Latin I)</option>
+                        <option value="cp858" ${s.codepage === 'cp858' ? 'selected' : ''}>CP858 (Latin I + Euro)</option>
+                        <option value="cp1252" ${s.codepage === 'cp1252' ? 'selected' : ''}>CP1252 (Windows)</option>
+                        <option value="cp860" ${s.codepage === 'cp860' ? 'selected' : ''}>CP860 (Portuguese)</option>
+                        <option value="cp863" ${s.codepage === 'cp863' ? 'selected' : ''}>CP863 (Can. French)</option>
+                        <option value="cp865" ${s.codepage === 'cp865' ? 'selected' : ''}>CP865 (Nordic)</option>
+                      </select>
+                    </div>
                   </div>
                   <div class="hint" style="margin-top:8px">
                     <strong>ESC/POS mode:</strong> Send plain text for receipts. The printer will initialize, print your text, feed lines, and auto-cut.
+                    Code page controls character encoding for accented/special characters.
                   </div>
                 </div>
                 <div class="actions">
@@ -561,6 +586,8 @@
         autoCut: document.getElementById(`set-autocut-${id}`).value === 'true',
         cutType: document.getElementById(`set-cuttype-${id}`).value,
         feedLines: parseInt(document.getElementById(`set-feed-${id}`).value) || 4,
+        codepage: document.getElementById(`set-codepage-${id}`).value,
+        printerProfile: document.getElementById(`set-profile-${id}`).value,
       };
       try {
         const res = await fetch(`${API}/printers/${encodeURIComponent(id)}/settings`, {

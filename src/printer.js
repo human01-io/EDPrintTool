@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { EscPosEncoder } = require('./escpos');
+const { getProfile, getProfileList } = require('./printer-profiles');
 
 // ─── Config persistence ─────────────────────────────────────
 // When running inside Electron's asar, __dirname is read-only.
@@ -90,7 +91,8 @@ const DEFAULT_SETTINGS = {
   orientation: 'N',           // N=normal, R=rotated, I=inverted, B=bottom-up
   mediaType: 'T',             // T=thermal transfer, D=direct thermal
   printMode: 'T',             // T=tear-off, P=peel-off, C=cutter
-  encoding: 'UTF-8',
+  codepage: '',              // '' = printer default, or 'cp437', 'cp850', 'cp858', 'cp1252'
+  printerProfile: 'generic', // printer capability profile
   // ESC/POS settings
   paperWidth: '80mm',         // '80mm' or '58mm'
   autoCut: true,              // send cut command after print
@@ -105,12 +107,19 @@ const DEFAULT_SETTINGS = {
  * Wraps content with init + cut based on printer settings.
  */
 function buildEscPosPayload(settings, content, copies) {
-  const encoder = new EscPosEncoder({ paperWidth: settings.paperWidth });
+  const profile = getProfile(settings.printerProfile);
+  const codepage = settings.codepage || profile.defaultCodepage || null;
+  const encoder = new EscPosEncoder({
+    paperWidth: settings.paperWidth,
+    codepage,
+  });
   for (let i = 0; i < copies; i++) {
     encoder.initialize();
     encoder.raw(content);
-    if (settings.autoCut) {
-      encoder.cut(settings.cutType || 'partial', settings.feedLines ?? 4);
+    if (settings.autoCut && profile.features.cut) {
+      const cutType = settings.cutType === 'full' || !profile.features.partialCut
+        ? 'full' : 'partial';
+      encoder.cut(cutType, settings.feedLines ?? 4);
     } else if (settings.feedLines > 0) {
       encoder.feed(settings.feedLines);
     }
@@ -520,4 +529,5 @@ module.exports = {
   buildSetupZPL,
   DEFAULT_SETTINGS,
   EscPosEncoder,
+  getProfileList,
 };

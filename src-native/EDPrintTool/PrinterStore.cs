@@ -104,6 +104,8 @@ public class PrinterStore
             if (partial.TryGetPropertyValue("autoCut", out var ac)) s.AutoCut = ac!.GetValue<bool>();
             if (partial.TryGetPropertyValue("cutType", out var ct)) s.CutType = ct!.GetValue<string>();
             if (partial.TryGetPropertyValue("feedLines", out var fl)) s.FeedLines = fl!.GetValue<int>();
+            if (partial.TryGetPropertyValue("codepage", out var cp)) s.Codepage = cp!.GetValue<string>();
+            if (partial.TryGetPropertyValue("printerProfile", out var pp)) s.PrinterProfile = pp!.GetValue<string>();
 
             s.ApplyPreset();
             SaveConfig();

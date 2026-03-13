@@ -249,6 +249,45 @@ public class HttpServer
             return;
         }
 
+        // POST /api/print-escpos/{printerId} — structured ESC/POS commands
+        if (method == "POST" && path.StartsWith("/api/print-escpos/"))
+        {
+            var printerId = ExtractSegment(path, 2);
+            var body = await ReadBody(req);
+
+            try
+            {
+                var obj = JsonNode.Parse(body)?.AsObject();
+                var commandsNode = obj?["commands"]?.AsArray();
+                var copies = obj?["copies"]?.GetValue<int>() ?? 1;
+
+                if (commandsNode == null)
+                {
+                    await WriteJson(res, 400, new { error = "Missing commands array" });
+                    return;
+                }
+
+                var printer = _store.GetPrinter(printerId);
+                if (printer == null)
+                {
+                    await WriteJson(res, 404, new { error = $"Printer not found: {printerId}" });
+                    return;
+                }
+
+                var s = printer.Settings;
+                var payload = RawPrinter.BuildFromCommands(s.PaperWidth, commandsNode, copies);
+                var result = await RawPrinter.SendRawAsync(printer, payload);
+                OnActivity?.Invoke($"ESC/POS print OK ({copies}x) → {printerId}: {result}", false);
+                await WriteJson(res, 200, new { success = true, message = result });
+            }
+            catch (Exception ex)
+            {
+                OnActivity?.Invoke($"ESC/POS print FAILED → {printerId}: {ex.Message}", true);
+                await WriteJson(res, 500, new { error = ex.Message });
+            }
+            return;
+        }
+
         // POST /api/print-raw
         if (method == "POST" && path == "/api/print-raw")
         {
@@ -369,6 +408,20 @@ public class HttpServer
                     var result = await RawPrinter.PrintAsync(p, zpl, copies, apply);
                     OnActivity?.Invoke($"Print OK ({copies}x) → {pid}", false);
                     return JsonOk(requestId, new { success = true, message = result });
+                }
+
+                case "printEscPos":
+                {
+                    var pid2 = msg["printerId"]?.GetValue<string>();
+                    var cmds = msg["commands"]?.AsArray();
+                    var copies2 = msg["copies"]?.GetValue<int>() ?? 1;
+                    if (pid2 == null || cmds == null) return JsonErr(requestId, "Missing printerId or commands");
+                    var p2 = _store.GetPrinter(pid2);
+                    if (p2 == null) return JsonErr(requestId, $"Printer not found: {pid2}");
+                    var payload = RawPrinter.BuildFromCommands(p2.Settings.PaperWidth, cmds, copies2);
+                    var result2 = await RawPrinter.SendRawAsync(p2, payload);
+                    OnActivity?.Invoke($"ESC/POS print OK ({copies2}x) → {pid2}", false);
+                    return JsonOk(requestId, new { success = true, message = result2 });
                 }
 
                 case "printRaw":

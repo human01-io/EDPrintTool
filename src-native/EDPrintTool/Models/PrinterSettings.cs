@@ -34,8 +34,8 @@ public class PrinterSettings
     [JsonPropertyName("printMode")]
     public string PrintMode { get; set; } = "T";
 
-    [JsonPropertyName("encoding")]
-    public string Encoding { get; set; } = "UTF-8";
+    [JsonPropertyName("codepage")]
+    public string Codepage { get; set; } = ""; // "" = printer default, or "cp437", "cp850", "cp858", "cp1252"
 
     // ESC/POS specific
     [JsonPropertyName("paperWidth")]
@@ -49,6 +49,9 @@ public class PrinterSettings
 
     [JsonPropertyName("feedLines")]
     public int FeedLines { get; set; } = 4; // lines to feed before cut
+
+    [JsonPropertyName("printerProfile")]
+    public string PrinterProfile { get; set; } = "generic"; // printer capability profile
 
     public void ApplyPreset()
     {

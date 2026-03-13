@@ -26,6 +26,11 @@ app.get('/api/label-presets', (req, res) => {
   res.json(printer.getLabelPresets());
 });
 
+// Printer profiles (ESC/POS capability sets)
+app.get('/api/printer-profiles', (req, res) => {
+  res.json(printer.getProfileList());
+});
+
 // List configured printers
 app.get('/api/printers', (req, res) => {
   res.json(printer.getPrinters());

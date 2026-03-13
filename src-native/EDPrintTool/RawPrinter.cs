@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Nodes;
 using EDPrintTool.Models;
 
 namespace EDPrintTool;
@@ -224,6 +225,8 @@ public static class RawPrinter
         for (int i = 0; i < copies; i++)
         {
             encoder.Initialize();
+            if (!string.IsNullOrEmpty(settings.Codepage))
+                encoder.Codepage(settings.Codepage);
             encoder.Raw(content);
             if (settings.AutoCut)
                 encoder.Cut(settings.CutType ?? "partial", settings.FeedLines);
@@ -231,5 +234,121 @@ public static class RawPrinter
                 encoder.Feed(settings.FeedLines);
         }
         return encoder.Encode();
+    }
+
+    /// <summary>
+    /// Build ESC/POS payload from structured command array.
+    /// Each command is a JSON array: ["method", arg1, arg2, ...]
+    /// </summary>
+    public static byte[] BuildFromCommands(string paperWidth, JsonArray commands, int copies = 1)
+    {
+        var encoder = new EscPosEncoder(paperWidth);
+        for (int i = 0; i < copies; i++)
+        {
+            foreach (var cmdNode in commands)
+            {
+                if (cmdNode is JsonArray arr && arr.Count > 0)
+                {
+                    var method = arr[0]?.GetValue<string>() ?? "";
+                    ApplyCommand(encoder, method, arr);
+                }
+                else if (cmdNode is JsonValue val)
+                {
+                    ApplyCommand(encoder, val.GetValue<string>(), new JsonArray());
+                }
+            }
+        }
+        return encoder.Encode();
+    }
+
+    private static void ApplyCommand(EscPosEncoder enc, string method, JsonArray args)
+    {
+        // args[0] is the method name, actual args start at [1]
+        switch (method)
+        {
+            case "initialize": enc.Initialize(); break;
+            case "codepage":
+                if (args.Count > 1) enc.Codepage(args[1]!.GetValue<string>());
+                break;
+            case "align":
+                enc.Align(args.Count > 1 ? args[1]!.GetValue<string>() : "left");
+                break;
+            case "bold":
+                enc.Bold(args.Count > 1 ? args[1]!.GetValue<bool>() : true);
+                break;
+            case "underline":
+                enc.Underline(args.Count > 1 ? (byte)args[1]!.GetValue<int>() : (byte)1);
+                break;
+            case "font":
+                enc.Font(args.Count > 1 ? (byte)args[1]!.GetValue<int>() : (byte)0);
+                break;
+            case "textSize":
+                enc.TextSize(
+                    args.Count > 1 ? args[1]!.GetValue<int>() : 1,
+                    args.Count > 2 ? args[2]!.GetValue<int>() : 1);
+                break;
+            case "invert":
+                enc.Invert(args.Count > 1 ? args[1]!.GetValue<bool>() : true);
+                break;
+            case "text":
+                if (args.Count > 1) enc.Text(args[1]!.GetValue<string>());
+                break;
+            case "line":
+                if (args.Count > 1) enc.Line(args[1]!.GetValue<string>());
+                break;
+            case "newline": enc.Newline(); break;
+            case "empty": enc.Newline(); break;
+            case "raw":
+                if (args.Count > 1) enc.Raw(args[1]!.GetValue<string>());
+                break;
+            case "rule":
+                enc.Rule(args.Count > 1 ? args[1]!.GetValue<string>()[0] : '-');
+                break;
+            case "columns":
+                if (args.Count > 1 && args[1] is JsonArray colArr)
+                    enc.Columns(colArr.Select(c => c?.GetValue<string>() ?? "").ToArray());
+                break;
+            case "pair":
+                if (args.Count >= 3)
+                    enc.Pair(
+                        args[1]!.GetValue<string>(),
+                        args[2]!.GetValue<string>(),
+                        args.Count > 3 ? args[3]!.GetValue<string>()[0] : '.');
+                break;
+            case "feed":
+                enc.Feed(args.Count > 1 ? args[1]!.GetValue<int>() : 1);
+                break;
+            case "cut":
+                enc.Cut(
+                    args.Count > 1 ? args[1]!.GetValue<string>() : "partial",
+                    args.Count > 2 ? args[2]!.GetValue<int>() : 4);
+                break;
+            case "openCashDrawer":
+                enc.OpenCashDrawer(args.Count > 1 ? args[1]!.GetValue<int>() : 0);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Send raw bytes to a printer using the appropriate transport.
+    /// </summary>
+    public static async Task<string> SendRawAsync(PrinterInfo printer, byte[] data)
+    {
+        return printer.Type switch
+        {
+            "network" => await PrintNetworkRawAsync(
+                printer.Host ?? throw new Exception($"No host for printer: {printer.Id}"),
+                printer.Port, data),
+
+            "usb" when OperatingSystem.IsWindows() => await PrintWindowsRawAsync(
+                printer.WindowsPrinter ?? throw new Exception($"No Windows printer name for: {printer.Id}"),
+                data),
+
+            "usb" => await PrintCupsRawAsync(
+                printer.CupsQueue ?? throw new Exception($"No CUPS queue for: {printer.Id}"),
+                data),
+
+            _ => throw new Exception($"Unknown printer type: {printer.Type}")
+        };
     }
 }
