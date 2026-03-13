@@ -41,10 +41,15 @@ public class EscPosEncoder
 
     // ─── Printer control ──────────────────────────────────────
 
-    /// <summary>ESC @ — Reset printer to defaults.</summary>
+    /// <summary>ESC @ — Reset printer, then set Font A, size 1x1, left align.</summary>
     public EscPosEncoder Initialize()
     {
-        Write(0x1B, 0x40);
+        Write(
+            0x1B, 0x40,       // ESC @ — reset printer
+            0x1B, 0x4D, 0x00, // ESC M 0 — select Font A (12x24, standard width)
+            0x1D, 0x21, 0x00, // GS ! 0 — character size 1x1 (no magnification)
+            0x1B, 0x61, 0x00  // ESC a 0 — left alignment
+        );
         return this;
     }
 
@@ -205,18 +210,26 @@ public class EscPosEncoder
     }
 
     /// <summary>
-    /// Cut paper — feeds first, then sends GS V Function A.
-    /// Uses separate ESC d (feed) + GS V (cut) for maximum compatibility.
-    /// Function A works on virtually all ESC/POS printers.
+    /// Cut paper — sends multiple cut command formats for maximum compatibility.
+    /// Sends BOTH legacy Epson cut (ESC i/m) AND standard GS V.
+    /// The printer responds to whichever it understands and ignores the rest.
+    /// Covers Epson TM, Star TSP in ESC/POS emulation, and generic printers.
     /// </summary>
     public EscPosEncoder Cut(string type = "partial", int feedLines = 4)
     {
         // Feed lines first (ESC d n)
         if (feedLines > 0)
             Write(0x1B, 0x64, (byte)Math.Clamp(feedLines, 0, 255));
-        // GS V Function A — simple, widely supported
-        byte m = type == "full" ? (byte)0x00 : (byte)0x01;
-        Write(0x1D, 0x56, m);
+        if (type == "full")
+        {
+            Write(0x1B, 0x69);       // ESC i — legacy full cut
+            Write(0x1D, 0x56, 0x00); // GS V 0 — standard full cut
+        }
+        else
+        {
+            Write(0x1B, 0x6D);       // ESC m — legacy partial cut
+            Write(0x1D, 0x56, 0x01); // GS V 1 — standard partial cut
+        }
         return this;
     }
 

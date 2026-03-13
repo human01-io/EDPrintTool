@@ -51,7 +51,12 @@ class EscPosEncoder {
 
   /** ESC @ — Reset printer to defaults */
   initialize() {
-    this._parts.push(Buffer.from([0x1B, 0x40]));
+    this._parts.push(Buffer.from([
+      0x1B, 0x40,       // ESC @ — reset printer
+      0x1B, 0x4D, 0x00, // ESC M 0 — select Font A (12x24, standard width)
+      0x1D, 0x21, 0x00, // GS ! 0 — character size 1x1 (no magnification)
+      0x1B, 0x61, 0x00, // ESC a 0 — left alignment
+    ]));
     if (this._codepage && CODEPAGES[this._codepage] !== undefined) {
       this.codepage(this._codepage);
     }
@@ -220,10 +225,15 @@ class EscPosEncoder {
   }
 
   /**
-   * Cut paper — feeds first, then sends GS V Function A.
-   * Uses separate ESC d (feed) + GS V (cut) for maximum compatibility.
-   * Function A (no feed param) works on virtually all ESC/POS printers
-   * including Star TSP in emulation mode and budget Chinese printers.
+   * Cut paper — sends multiple cut command formats for maximum compatibility.
+   *
+   * Strategy: feed first, then send BOTH legacy Epson cut (ESC i / ESC m)
+   * AND standard GS V. The printer responds to whichever it understands
+   * and ignores the rest. This covers:
+   *   - Epson TM series (GS V)
+   *   - Star TSP in ESC/POS emulation (ESC i / ESC m)
+   *   - Budget/generic Chinese printers (usually one of the above)
+   *
    * @param {'full'|'partial'} [type='partial']
    * @param {number} [feedLines=4] - lines to feed before cutting
    */
@@ -232,9 +242,13 @@ class EscPosEncoder {
     if (feedLines > 0) {
       this._parts.push(Buffer.from([0x1B, 0x64, Math.min(feedLines, 255)]));
     }
-    // GS V Function A — simple, widely supported
-    const m = type === 'full' ? 0x00 : 0x01;
-    this._parts.push(Buffer.from([0x1D, 0x56, m]));
+    if (type === 'full') {
+      this._parts.push(Buffer.from([0x1B, 0x69]));       // ESC i — legacy full cut
+      this._parts.push(Buffer.from([0x1D, 0x56, 0x00])); // GS V 0 — standard full cut
+    } else {
+      this._parts.push(Buffer.from([0x1B, 0x6D]));       // ESC m — legacy partial cut
+      this._parts.push(Buffer.from([0x1D, 0x56, 0x01])); // GS V 1 — standard partial cut
+    }
     return this;
   }
 
