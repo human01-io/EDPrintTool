@@ -206,26 +206,30 @@ public static class RawPrinter
     }
 
     /// <summary>
-    /// Build a complete ESC/POS byte payload: init + content × copies + feed + cut
+    /// Build a complete ESC/POS byte payload using the encoder.
     /// </summary>
     private static byte[] BuildEscPosPayload(PrinterSettings settings, string content, int copies, bool applySettings)
     {
-        using var ms = new MemoryStream();
-
-        for (int i = 0; i < copies; i++)
+        if (!applySettings)
         {
-            // Init printer
-            if (applySettings)
-                ms.Write(settings.BuildEscPosInit());
-
-            // Content as UTF-8 bytes
-            ms.Write(Encoding.UTF8.GetBytes(content));
-
-            // Feed + cut
-            if (applySettings)
-                ms.Write(settings.BuildEscPosCut());
+            // Raw pass-through: just encode content as UTF-8, no init/cut
+            var raw = Encoding.UTF8.GetBytes(content);
+            if (copies == 1) return raw;
+            using var ms = new MemoryStream(raw.Length * copies);
+            for (int i = 0; i < copies; i++) ms.Write(raw);
+            return ms.ToArray();
         }
 
-        return ms.ToArray();
+        var encoder = new EscPosEncoder(settings.PaperWidth);
+        for (int i = 0; i < copies; i++)
+        {
+            encoder.Initialize();
+            encoder.Raw(content);
+            if (settings.AutoCut)
+                encoder.Cut(settings.CutType ?? "partial", settings.FeedLines);
+            else if (settings.FeedLines > 0)
+                encoder.Feed(settings.FeedLines);
+        }
+        return encoder.Encode();
     }
 }

@@ -213,6 +213,7 @@
         <button class="btn-primary" onclick="printLabel()">Print</button>
         <button class="btn-secondary" onclick="loadSample()">Sample ZPL</button>
         <button class="btn-secondary" onclick="loadSampleReceipt()">Sample Receipt</button>
+        <button class="btn-secondary" onclick="printFormattedReceipt()">Print Formatted Receipt</button>
       </div>
     </div>
 
@@ -673,6 +674,66 @@ TOTAL:                   $40.47
       www.edprinttool.com
 `;
       log('Sample receipt loaded (set printer to ESC/POS mode)', 'success');
+    }
+
+    // ─── Formatted receipt (uses ESC/POS encoder API) ────
+    async function printFormattedReceipt() {
+      const printerId = document.getElementById('print-target').value;
+      if (!printerId) return log('Select a printer first', 'error');
+
+      // Structured ESC/POS commands — each is [method, ...args]
+      const commands = [
+        ['initialize'],
+        ['align', 'center'],
+        ['bold', true],
+        ['textSize', 2, 2],
+        ['line', 'MY STORE'],
+        ['textSize', 1, 1],
+        ['bold', false],
+        ['line', '123 Main Street'],
+        ['line', 'New York, NY 10001'],
+        ['line', 'Tel: (555) 123-4567'],
+        ['rule', '='],
+        ['align', 'left'],
+        ['bold', true],
+        ['line', 'SALE RECEIPT'],
+        ['bold', false],
+        ['columns', ['Date: 2026-03-13', '14:30']],
+        ['columns', ['Cashier:', 'Admin']],
+        ['rule'],
+        ['columns', ['Item', 'Qty', 'Price']],
+        ['rule'],
+        ['columns', ['Widget A', '2', '$9.99']],
+        ['columns', ['Widget B', '1', '$14.99']],
+        ['columns', ['Service Fee', '1', '$2.50']],
+        ['rule'],
+        ['pair', 'Subtotal', '$37.47', ' '],
+        ['pair', 'Tax (8%)', '$3.00', ' '],
+        ['rule', '='],
+        ['bold', true],
+        ['textSize', 1, 2],
+        ['pair', 'TOTAL', '$40.47', ' '],
+        ['textSize', 1, 1],
+        ['bold', false],
+        ['rule', '='],
+        ['empty'],
+        ['align', 'center'],
+        ['line', 'Thank you for your visit!'],
+        ['line', 'www.edprinttool.com'],
+        ['empty'],
+        ['cut', 'partial', 4],
+      ];
+
+      try {
+        const res = await fetch(`${API}/print-escpos/${encodeURIComponent(printerId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ commands }),
+        });
+        const data = await res.json();
+        if (data.success || res.ok) log('Formatted receipt sent', 'success');
+        else log(`Print failed: ${data.error}`, 'error');
+      } catch (err) { log(`Print request failed: ${err.message}`, 'error'); }
     }
 
     // ─── Init ────────────────────────────────────

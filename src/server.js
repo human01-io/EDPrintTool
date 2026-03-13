@@ -4,6 +4,7 @@ const { WebSocketServer } = require('ws');
 const cors = require('cors');
 const path = require('path');
 const printer = require('./printer');
+const { EscPosEncoder } = require('./escpos');
 
 const PORT = process.env.PORT || 8189;
 const app = express();
@@ -74,6 +75,48 @@ app.post('/api/print/:printerId', async (req, res) => {
     const applySettings = typeof req.body === 'object' ? req.body.applySettings : true;
     if (!zpl) return res.status(400).json({ error: 'Missing ZPL data. Send as text body or { "zpl": "...", "copies": 1 }' });
     const result = await printer.print(req.params.printerId, zpl, { copies, applySettings });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Print structured ESC/POS commands to a printer
+// Body: { "commands": [...], "copies": 1 }
+// Each command is [method, ...args], e.g. ["bold", true], ["line", "Hello"], ["cut"]
+app.post('/api/print-escpos/:printerId', async (req, res) => {
+  try {
+    const { commands, copies = 1 } = req.body;
+    if (!commands || !Array.isArray(commands)) {
+      return res.status(400).json({ error: 'Missing commands array' });
+    }
+    const p = printer.getPrinter(req.params.printerId);
+    if (!p) return res.status(404).json({ error: `Printer not found: ${req.params.printerId}` });
+
+    const s = p.settings || {};
+    const encoder = new EscPosEncoder({ paperWidth: s.paperWidth });
+    for (let i = 0; i < copies; i++) {
+      for (const cmd of commands) {
+        const [method, ...args] = Array.isArray(cmd) ? cmd : [cmd];
+        if (typeof encoder[method] === 'function') {
+          encoder[method](...args);
+        }
+      }
+    }
+    const payload = encoder.encode();
+
+    let result;
+    if (p.type === 'network') {
+      result = await printer.printNetwork(p.host, p.port, payload);
+    } else if (p.type === 'usb') {
+      if (require('os').platform() === 'win32') {
+        result = await printer.printWindows(p.windowsPrinter, payload);
+      } else {
+        result = await printer.printCUPS(p.cupsQueue, payload);
+      }
+    } else {
+      throw new Error(`Unknown printer type: ${p.type}`);
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });

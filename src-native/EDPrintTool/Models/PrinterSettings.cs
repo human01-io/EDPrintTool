@@ -76,39 +76,5 @@ public class PrinterSettings
         );
     }
 
-    /// <summary>
-    /// Build ESC/POS initialization sequence.
-    /// </summary>
-    public byte[] BuildEscPosInit()
-    {
-        // ESC @ — Initialize printer (reset to defaults)
-        // Note: we do NOT send GS W (set print area width) because most receipt
-        // printers auto-detect paper width and GS W can confuse some models.
-        return new byte[] { 0x1B, 0x40 };
-    }
-
-    /// <summary>
-    /// Build ESC/POS cut sequence appended after content.
-    /// Uses GS V function B (0x41/0x42) with integrated feed for wide compatibility.
-    /// </summary>
-    public byte[] BuildEscPosCut()
-    {
-        var bytes = new List<byte>();
-        byte feed = (byte)Math.Clamp(FeedLines, 0, 255);
-        if (AutoCut)
-        {
-            if (CutType == "full")
-                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x41, feed }); // GS V m=65 n — Function B: full cut, feed n
-            else
-                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x42, feed }); // GS V m=66 n — Function B: partial cut, feed n
-        }
-        else if (FeedLines > 0)
-        {
-            // No cut, just feed
-            bytes.AddRange(new byte[] { 0x1B, 0x64, feed });
-        }
-        return bytes.ToArray();
-    }
-
     public PrinterSettings Clone() => (PrinterSettings)MemberwiseClone();
 }

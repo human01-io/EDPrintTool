@@ -3,6 +3,7 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { EscPosEncoder } = require('./escpos');
 
 // ─── Config persistence ─────────────────────────────────────
 // When running inside Electron's asar, __dirname is read-only.
@@ -99,28 +100,22 @@ const DEFAULT_SETTINGS = {
 
 // ─── ESC/POS helpers ──────────────────────────────────────────
 
-function buildEscPosInit() {
-  // ESC @ — Initialize printer (reset to defaults)
-  // Note: we do NOT send GS W (set print area width) because most receipt
-  // printers auto-detect paper width and GS W can confuse some models.
-  return Buffer.from([0x1B, 0x40]);
-}
-
-function buildEscPosCut(settings) {
-  const bytes = [];
-  // GS V m n — Cut with feed (function B, widely compatible)
-  if (settings.autoCut) {
-    const feed = Math.min(settings.feedLines || 0, 255);
-    if (settings.cutType === 'full') {
-      bytes.push(0x1D, 0x56, 0x41, feed); // GS V m=65 n — Function B: full cut, feed n
-    } else {
-      bytes.push(0x1D, 0x56, 0x42, feed); // GS V m=66 n — Function B: partial cut, feed n
+/**
+ * Build an ESC/POS binary payload using the encoder.
+ * Wraps content with init + cut based on printer settings.
+ */
+function buildEscPosPayload(settings, content, copies) {
+  const encoder = new EscPosEncoder({ paperWidth: settings.paperWidth });
+  for (let i = 0; i < copies; i++) {
+    encoder.initialize();
+    encoder.raw(content);
+    if (settings.autoCut) {
+      encoder.cut(settings.cutType || 'partial', settings.feedLines ?? 4);
+    } else if (settings.feedLines > 0) {
+      encoder.feed(settings.feedLines);
     }
-  } else if (settings.feedLines > 0) {
-    // No cut, just feed
-    bytes.push(0x1B, 0x64, Math.min(settings.feedLines, 255));
   }
-  return Buffer.from(bytes);
+  return encoder.encode();
 }
 
 function addPrinter({ id, name, type, host, port, cupsQueue, windowsPrinter, settings }) {
@@ -473,14 +468,14 @@ async function print(printerId, content, options = {}) {
   let payload;
 
   if (isEscPos) {
-    // ESC/POS: build binary payload with init + content + feed + cut
-    const parts = [];
-    for (let i = 0; i < copies; i++) {
-      if (applySettings) parts.push(buildEscPosInit());
-      parts.push(Buffer.from(content, 'utf8'));
-      if (applySettings) parts.push(buildEscPosCut(p.settings));
+    if (applySettings) {
+      payload = buildEscPosPayload(p.settings, content, copies);
+    } else {
+      // Raw pass-through: just encode content as UTF-8, no init/cut
+      const parts = [];
+      for (let i = 0; i < copies; i++) parts.push(Buffer.from(content, 'utf8'));
+      payload = Buffer.concat(parts);
     }
-    payload = Buffer.concat(parts);
   } else {
     // ZPL: text-based payload
     payload = '';
@@ -524,4 +519,5 @@ module.exports = {
   getLabelPresets,
   buildSetupZPL,
   DEFAULT_SETTINGS,
+  EscPosEncoder,
 };
