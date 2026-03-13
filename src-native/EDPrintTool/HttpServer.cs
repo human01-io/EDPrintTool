@@ -142,6 +142,22 @@ public class HttpServer
             return;
         }
 
+        // GET /api/printer-profiles
+        if (method == "GET" && path == "/api/printer-profiles")
+        {
+            var profiles = new[]
+            {
+                new { id = "generic", name = "Generic ESC/POS" },
+                new { id = "epson", name = "Epson TM Series" },
+                new { id = "star", name = "Star TSP Series (ESC/POS mode)" },
+                new { id = "bixolon", name = "Bixolon SRP Series" },
+                new { id = "citizen", name = "Citizen CT Series" },
+                new { id = "custom", name = "Custom (user-defined)" },
+            };
+            await WriteJson(res, 200, profiles);
+            return;
+        }
+
         // GET /api/printers
         if (method == "GET" && path == "/api/printers")
         {

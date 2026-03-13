@@ -297,7 +297,8 @@
       } catch { labelPresets = []; }
       try {
         const res = await fetch(`${API}/printer-profiles`);
-        printerProfiles = await res.json();
+        const data = await res.json();
+        printerProfiles = Array.isArray(data) ? data : [{ id: 'generic', name: 'Generic ESC/POS' }];
       } catch { printerProfiles = [{ id: 'generic', name: 'Generic ESC/POS' }]; }
     }
 
