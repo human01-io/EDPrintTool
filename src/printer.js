@@ -94,24 +94,36 @@ const DEFAULT_SETTINGS = {
 };
 
 // ─── ESC/POS helpers ──────────────────────────────────────────
-function buildEscPosInit() {
-  // ESC @ — Initialize printer
-  return Buffer.from([0x1B, 0x40]);
+
+// Print area widths in dots (at 203 dpi)
+const ESCPOS_WIDTHS = {
+  '80mm': 576,
+  '58mm': 384,
+};
+
+function buildEscPosInit(settings) {
+  const bytes = [
+    0x1B, 0x40,  // ESC @ — Initialize printer
+  ];
+  // GS W nL nH — Set print area width
+  const widthDots = ESCPOS_WIDTHS[settings.paperWidth] || 576;
+  bytes.push(0x1D, 0x57, widthDots & 0xFF, (widthDots >> 8) & 0xFF);
+  return Buffer.from(bytes);
 }
 
 function buildEscPosCut(settings) {
   const bytes = [];
-  // ESC d n — Print and feed n lines
-  if (settings.feedLines > 0) {
-    bytes.push(0x1B, 0x64, Math.min(settings.feedLines, 255));
-  }
-  // GS V — Cut paper
+  // GS V m n — Cut with feed (function B, widely compatible)
   if (settings.autoCut) {
+    const feed = Math.min(settings.feedLines || 0, 255);
     if (settings.cutType === 'full') {
-      bytes.push(0x1D, 0x56, 0x00); // GS V 0 = full cut
+      bytes.push(0x1D, 0x56, 0x42, feed); // GS V 66 n = full cut, feed n
     } else {
-      bytes.push(0x1D, 0x56, 0x01); // GS V 1 = partial cut
+      bytes.push(0x1D, 0x56, 0x41, feed); // GS V 65 n = partial cut, feed n
     }
+  } else if (settings.feedLines > 0) {
+    // No cut, just feed
+    bytes.push(0x1B, 0x64, Math.min(settings.feedLines, 255));
   }
   return Buffer.from(bytes);
 }
@@ -469,7 +481,7 @@ async function print(printerId, content, options = {}) {
     // ESC/POS: build binary payload with init + content + feed + cut
     const parts = [];
     for (let i = 0; i < copies; i++) {
-      if (applySettings) parts.push(buildEscPosInit());
+      if (applySettings) parts.push(buildEscPosInit(p.settings));
       parts.push(Buffer.from(content, 'utf8'));
       if (applySettings) parts.push(buildEscPosCut(p.settings));
     }

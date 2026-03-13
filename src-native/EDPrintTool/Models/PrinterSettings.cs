@@ -84,27 +84,31 @@ public class PrinterSettings
         var bytes = new List<byte>();
         // ESC @ — Initialize printer
         bytes.AddRange(new byte[] { 0x1B, 0x40 });
+        // GS W nL nH — Set print area width
+        int widthDots = PaperWidth == "58mm" ? 384 : 576;
+        bytes.AddRange(new byte[] { 0x1D, 0x57, (byte)(widthDots & 0xFF), (byte)((widthDots >> 8) & 0xFF) });
         return bytes.ToArray();
     }
 
     /// <summary>
-    /// Build ESC/POS cut + feed sequence appended after content.
+    /// Build ESC/POS cut sequence appended after content.
+    /// Uses GS V function B (0x41/0x42) with integrated feed for wide compatibility.
     /// </summary>
     public byte[] BuildEscPosCut()
     {
         var bytes = new List<byte>();
-        // ESC d n — Print and feed n lines
-        if (FeedLines > 0)
-        {
-            bytes.AddRange(new byte[] { 0x1B, 0x64, (byte)Math.Clamp(FeedLines, 0, 255) });
-        }
-        // GS V — Cut paper
+        byte feed = (byte)Math.Clamp(FeedLines, 0, 255);
         if (AutoCut)
         {
             if (CutType == "full")
-                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x00 }); // GS V 0 = full cut
+                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x42, feed }); // GS V 66 n = full cut, feed n
             else
-                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x01 }); // GS V 1 = partial cut
+                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x41, feed }); // GS V 65 n = partial cut, feed n
+        }
+        else if (FeedLines > 0)
+        {
+            // No cut, just feed
+            bytes.AddRange(new byte[] { 0x1B, 0x64, feed });
         }
         return bytes.ToArray();
     }
