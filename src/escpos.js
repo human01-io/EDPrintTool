@@ -51,12 +51,10 @@ class EscPosEncoder {
 
   /** ESC @ — Reset printer to defaults */
   initialize() {
-    this._parts.push(Buffer.from([
-      0x1B, 0x40,       // ESC @ — reset printer
-      0x1B, 0x4D, 0x00, // ESC M 0 — select Font A (12x24, standard width)
-      0x1D, 0x21, 0x00, // GS ! 0 — character size 1x1 (no magnification)
-      0x1B, 0x61, 0x00, // ESC a 0 — left alignment
-    ]));
+    // Only ESC @ — the safest init. Extra commands (ESC M, GS !, ESC a)
+    // can cause errors on printers with limited ESC/POS support like
+    // Star TSP100 in emulation mode.
+    this._parts.push(Buffer.from([0x1B, 0x40]));
     if (this._codepage && CODEPAGES[this._codepage] !== undefined) {
       this.codepage(this._codepage);
     }
@@ -242,13 +240,9 @@ class EscPosEncoder {
     if (feedLines > 0) {
       this._parts.push(Buffer.from([0x1B, 0x64, Math.min(feedLines, 255)]));
     }
-    if (type === 'full') {
-      this._parts.push(Buffer.from([0x1B, 0x69]));       // ESC i — legacy full cut
-      this._parts.push(Buffer.from([0x1D, 0x56, 0x00])); // GS V 0 — standard full cut
-    } else {
-      this._parts.push(Buffer.from([0x1B, 0x6D]));       // ESC m — legacy partial cut
-      this._parts.push(Buffer.from([0x1D, 0x56, 0x01])); // GS V 1 — standard partial cut
-    }
+    // GS V Function A — the most standard cut command
+    const m = type === 'full' ? 0x00 : 0x01;
+    this._parts.push(Buffer.from([0x1D, 0x56, m]));
     return this;
   }
 

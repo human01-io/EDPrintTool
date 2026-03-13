@@ -41,15 +41,12 @@ public class EscPosEncoder
 
     // ─── Printer control ──────────────────────────────────────
 
-    /// <summary>ESC @ — Reset printer, then set Font A, size 1x1, left align.</summary>
+    /// <summary>ESC @ — Reset printer to defaults.</summary>
     public EscPosEncoder Initialize()
     {
-        Write(
-            0x1B, 0x40,       // ESC @ — reset printer
-            0x1B, 0x4D, 0x00, // ESC M 0 — select Font A (12x24, standard width)
-            0x1D, 0x21, 0x00, // GS ! 0 — character size 1x1 (no magnification)
-            0x1B, 0x61, 0x00  // ESC a 0 — left alignment
-        );
+        // Only ESC @ — the safest init. Extra commands can cause errors on
+        // printers with limited ESC/POS support like Star TSP100 in emulation mode.
+        Write(0x1B, 0x40);
         return this;
     }
 
@@ -220,16 +217,9 @@ public class EscPosEncoder
         // Feed lines first (ESC d n)
         if (feedLines > 0)
             Write(0x1B, 0x64, (byte)Math.Clamp(feedLines, 0, 255));
-        if (type == "full")
-        {
-            Write(0x1B, 0x69);       // ESC i — legacy full cut
-            Write(0x1D, 0x56, 0x00); // GS V 0 — standard full cut
-        }
-        else
-        {
-            Write(0x1B, 0x6D);       // ESC m — legacy partial cut
-            Write(0x1D, 0x56, 0x01); // GS V 1 — standard partial cut
-        }
+        // GS V Function A — the most standard cut command
+        byte m = type == "full" ? (byte)0x00 : (byte)0x01;
+        Write(0x1D, 0x56, m);
         return this;
     }
 
