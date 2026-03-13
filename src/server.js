@@ -6,12 +6,29 @@ const path = require('path');
 const printer = require('./printer');
 const { EscPosEncoder } = require('./escpos');
 
+const swaggerUiPath = require('swagger-ui-dist').absolutePath();
+
 const PORT = process.env.PORT || 8189;
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.text({ limit: '5mb', type: 'text/plain' }));
+
+// Swagger UI at /docs
+app.get('/docs', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html><head>
+  <title>EDPrintTool API</title>
+  <link rel="stylesheet" href="/swagger-ui/swagger-ui.css">
+</head><body>
+  <div id="swagger-ui"></div>
+  <script src="/swagger-ui/swagger-ui-bundle.js"></script>
+  <script>SwaggerUIBundle({ url: '/openapi.json', dom_id: '#swagger-ui' });</script>
+</body></html>`);
+});
+app.use('/swagger-ui', express.static(swaggerUiPath));
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ─── REST API ────────────────────────────────────────────────

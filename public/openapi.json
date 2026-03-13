@@ -1,0 +1,693 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "EDPrintTool API",
+    "description": "REST API for sending raw ZPL and ESC/POS commands to thermal printers. Free QZ Tray alternative.",
+    "version": "1.0.0",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8189",
+      "description": "Local EDPrintTool service"
+    }
+  ],
+  "tags": [
+    { "name": "Status", "description": "Server health check" },
+    { "name": "Printers", "description": "Printer configuration and discovery" },
+    { "name": "Printing", "description": "Send print jobs to printers" },
+    { "name": "Presets & Profiles", "description": "Label presets and printer capability profiles" }
+  ],
+  "paths": {
+    "/api/status": {
+      "get": {
+        "tags": ["Status"],
+        "summary": "Server status",
+        "description": "Returns the server status, version, and count of configured printers.",
+        "operationId": "getStatus",
+        "responses": {
+          "200": {
+            "description": "Server is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                },
+                "example": {
+                  "status": "running",
+                  "version": "1.0.0",
+                  "printers": 2
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printers": {
+      "get": {
+        "tags": ["Printers"],
+        "summary": "List configured printers",
+        "description": "Returns all printers that have been added and saved in the configuration.",
+        "operationId": "listPrinters",
+        "responses": {
+          "200": {
+            "description": "List of printers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Printer" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Printers"],
+        "summary": "Add a printer",
+        "description": "Add a new printer to the configuration. Supports network (TCP port 9100) and USB (Windows spooler or CUPS) printers.",
+        "operationId": "addPrinter",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AddPrinterRequest" },
+              "examples": {
+                "network": {
+                  "summary": "Network ZPL printer",
+                  "value": {
+                    "name": "Warehouse Zebra",
+                    "type": "network",
+                    "host": "192.168.1.100",
+                    "port": 9100,
+                    "settings": { "language": "ZPL", "labelPreset": "4x6", "darkness": 15 }
+                  }
+                },
+                "usb-windows": {
+                  "summary": "Windows USB printer",
+                  "value": {
+                    "name": "Front Desk Receipt",
+                    "type": "usb",
+                    "windowsPrinter": "EPSON TM-T88V",
+                    "settings": { "language": "ESC/POS", "paperWidth": "80mm" }
+                  }
+                },
+                "usb-cups": {
+                  "summary": "macOS/Linux USB printer",
+                  "value": {
+                    "name": "Kitchen Printer",
+                    "type": "usb",
+                    "cupsQueue": "Star_TSP100",
+                    "settings": { "language": "ESC/POS", "paperWidth": "80mm", "printerProfile": "star" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Printer added",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Printer" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printers/discover": {
+      "get": {
+        "tags": ["Printers"],
+        "summary": "Discover system printers",
+        "description": "Discovers printers installed on the host OS. Uses `Get-Printer` on Windows and `lpstat` on macOS/Linux.",
+        "operationId": "discoverPrinters",
+        "responses": {
+          "200": {
+            "description": "List of discovered printers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/DiscoveredPrinter" }
+                },
+                "example": [
+                  { "name": "ZDesigner ZD420-203dpi ZPL", "driver": "ZDesigner ZD420-203dpi ZPL", "status": "" },
+                  { "name": "EPSON TM-T88V", "driver": "EPSON TM-T88V Receipt", "status": "" }
+                ]
+              }
+            }
+          },
+          "500": {
+            "description": "Discovery failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printers/{id}/settings": {
+      "patch": {
+        "tags": ["Printers"],
+        "summary": "Update printer settings",
+        "description": "Partially update settings for an existing printer. If `labelPreset` is changed, `widthDots` and `heightDots` are automatically updated to match.",
+        "operationId": "updatePrinterSettings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Printer ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PrinterSettings" },
+              "examples": {
+                "zpl": {
+                  "summary": "Change ZPL label size and darkness",
+                  "value": { "labelPreset": "4x4", "darkness": 20, "speed": 6 }
+                },
+                "escpos": {
+                  "summary": "Change ESC/POS paper width",
+                  "value": { "paperWidth": "58mm", "autoCut": false }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated printer",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Printer" }
+              }
+            }
+          },
+          "400": {
+            "description": "Printer not found or invalid settings",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printers/{id}": {
+      "delete": {
+        "tags": ["Printers"],
+        "summary": "Remove a printer",
+        "description": "Remove a printer from the configuration.",
+        "operationId": "removePrinter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Printer ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removal result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "removed": { "type": "boolean" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printers/{id}/debug": {
+      "get": {
+        "tags": ["Printers"],
+        "summary": "Debug printer",
+        "description": "Returns the printer's current settings and a hex dump of what a test payload would look like. Useful for diagnosing print issues.",
+        "operationId": "debugPrinter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Printer ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Debug info with hex dump",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/DebugInfo" }
+              }
+            }
+          },
+          "404": {
+            "description": "Printer not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/print/{printerId}": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Print ZPL",
+        "description": "Send ZPL to a configured printer. By default, the printer's saved settings (label size, darkness, speed, etc.) are prepended as a ZPL config block. Set `applySettings: false` for raw passthrough. Also works for ESC/POS printers — raw text content is wrapped with init/cut commands based on printer settings.",
+        "operationId": "printZPL",
+        "parameters": [
+          {
+            "name": "printerId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Printer ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PrintRequest" },
+              "example": {
+                "zpl": "^XA^FO50,50^ADN,36,20^FDHello World^FS^XZ",
+                "copies": 1,
+                "applySettings": true
+              }
+            },
+            "text/plain": {
+              "schema": { "type": "string" },
+              "example": "^XA^FO50,50^ADN,36,20^FDHello World^FS^XZ"
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Print job sent",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PrintResult" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing ZPL data",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "Print failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/print-escpos/{printerId}": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Print ESC/POS commands",
+        "description": "Send structured ESC/POS commands to a receipt printer. Each command is an array of `[method, ...args]`. Commands are processed through the ESC/POS encoder which generates the raw byte sequence.",
+        "operationId": "printEscPos",
+        "parameters": [
+          {
+            "name": "printerId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Printer ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/EscPosRequest" },
+              "example": {
+                "commands": [
+                  ["initialize"],
+                  ["align", "center"],
+                  ["bold", true],
+                  ["line", "MY STORE"],
+                  ["bold", false],
+                  ["rule"],
+                  ["align", "left"],
+                  ["line", "Item              Qty   Price"],
+                  ["line", "Widget A           2    $9.99"],
+                  ["rule"],
+                  ["align", "right"],
+                  ["bold", true],
+                  ["line", "TOTAL: $9.99"],
+                  ["cut", "partial", 4]
+                ],
+                "copies": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Print job sent",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PrintResult" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid commands",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Printer not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "Print failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/print-raw": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Quick print to IP",
+        "description": "Send raw data directly to a network printer by IP address and port, without saving a printer configuration. Useful for one-off prints or testing.",
+        "operationId": "printRaw",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RawPrintRequest" },
+              "example": {
+                "host": "192.168.1.100",
+                "port": 9100,
+                "zpl": "^XA^FO50,50^ADN,36,20^FDTest^FS^XZ"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Print job sent",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PrintResult" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing host or zpl",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "Print failed",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/label-presets": {
+      "get": {
+        "tags": ["Presets & Profiles"],
+        "summary": "List label presets",
+        "description": "Returns available ZPL label size presets with dimensions in dots at 203 DPI.",
+        "operationId": "getLabelPresets",
+        "responses": {
+          "200": {
+            "description": "List of label presets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/LabelPreset" }
+                },
+                "example": [
+                  { "id": "4x6", "widthDots": 812, "heightDots": 1218, "desc": "4\" x 6\" (shipping)" },
+                  { "id": "4x4", "widthDots": 812, "heightDots": 812, "desc": "4\" x 4\"" },
+                  { "id": "2x1", "widthDots": 406, "heightDots": 203, "desc": "2\" x 1\"" }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/printer-profiles": {
+      "get": {
+        "tags": ["Presets & Profiles"],
+        "summary": "List printer profiles",
+        "description": "Returns available ESC/POS printer capability profiles. Each profile declares which features a printer model supports (cut, partial cut, cash drawer, code pages, etc.).",
+        "operationId": "getPrinterProfiles",
+        "responses": {
+          "200": {
+            "description": "List of printer profiles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/PrinterProfile" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Status": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "running" },
+          "version": { "type": "string", "example": "1.0.0" },
+          "printers": { "type": "integer", "description": "Number of configured printers", "example": 2 }
+        }
+      },
+      "PrinterSettings": {
+        "type": "object",
+        "description": "Printer configuration settings. ZPL and ESC/POS settings coexist; only relevant ones are used based on the `language` field.",
+        "properties": {
+          "language": { "type": "string", "enum": ["ZPL", "ESC/POS"], "description": "Printer language", "default": "ZPL" },
+          "labelPreset": { "type": "string", "description": "Label size preset name (e.g. '4x6', '4x4', '2x1') or 'custom'", "default": "4x6" },
+          "widthDots": { "type": "integer", "description": "Label width in dots", "default": 812 },
+          "heightDots": { "type": "integer", "description": "Label height in dots", "default": 1218 },
+          "dpi": { "type": "integer", "enum": [203, 304], "description": "Printer resolution", "default": 203 },
+          "darkness": { "type": "integer", "minimum": 0, "maximum": 30, "description": "ZPL print darkness", "default": 15 },
+          "speed": { "type": "integer", "minimum": 2, "maximum": 14, "description": "ZPL print speed in inches/sec", "default": 4 },
+          "orientation": { "type": "string", "enum": ["N", "R", "I", "B"], "description": "N=normal, R=rotated, I=inverted, B=bottom-up", "default": "N" },
+          "mediaType": { "type": "string", "enum": ["T", "D"], "description": "T=thermal transfer, D=direct thermal", "default": "T" },
+          "printMode": { "type": "string", "enum": ["T", "P", "C"], "description": "T=tear-off, P=peel-off, C=cutter", "default": "T" },
+          "codepage": { "type": "string", "enum": ["", "cp437", "cp850", "cp858", "cp860", "cp863", "cp865", "cp1252"], "description": "Code page (empty string = printer default)", "default": "" },
+          "printerProfile": { "type": "string", "enum": ["generic", "epson", "star", "bixolon", "citizen", "custom"], "description": "ESC/POS printer capability profile", "default": "generic" },
+          "paperWidth": { "type": "string", "enum": ["80mm", "58mm"], "description": "ESC/POS paper width", "default": "80mm" },
+          "autoCut": { "type": "boolean", "description": "Send cut command after ESC/POS print", "default": true },
+          "cutType": { "type": "string", "enum": ["partial", "full"], "description": "ESC/POS cut type", "default": "partial" },
+          "feedLines": { "type": "integer", "description": "Lines to feed before cutting", "default": 4 }
+        }
+      },
+      "Printer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique printer ID (auto-generated from name if not provided)", "example": "warehouse-zebra" },
+          "name": { "type": "string", "description": "Display name", "example": "Warehouse Zebra" },
+          "type": { "type": "string", "enum": ["network", "usb"], "description": "Connection type" },
+          "host": { "type": "string", "nullable": true, "description": "IP address or hostname (network printers)", "example": "192.168.1.100" },
+          "port": { "type": "integer", "description": "TCP port (network printers)", "default": 9100 },
+          "cupsQueue": { "type": "string", "nullable": true, "description": "CUPS queue name (macOS/Linux USB printers)" },
+          "windowsPrinter": { "type": "string", "nullable": true, "description": "Windows printer name (USB printers)" },
+          "settings": { "$ref": "#/components/schemas/PrinterSettings" },
+          "addedAt": { "type": "string", "format": "date-time", "description": "When the printer was added" }
+        }
+      },
+      "AddPrinterRequest": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "id": { "type": "string", "description": "Custom printer ID (optional, auto-generated from name)" },
+          "name": { "type": "string", "description": "Display name" },
+          "type": { "type": "string", "enum": ["network", "usb"], "description": "Connection type" },
+          "host": { "type": "string", "description": "IP address or hostname (required for network printers)" },
+          "port": { "type": "integer", "description": "TCP port", "default": 9100 },
+          "cupsQueue": { "type": "string", "description": "CUPS queue name (for macOS/Linux USB printers)" },
+          "windowsPrinter": { "type": "string", "description": "Windows printer name (for Windows USB printers)" },
+          "settings": { "$ref": "#/components/schemas/PrinterSettings" }
+        }
+      },
+      "DiscoveredPrinter": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Printer name as reported by the OS", "example": "ZDesigner ZD420-203dpi ZPL" },
+          "driver": { "type": "string", "description": "Driver name (Windows only)", "example": "ZDesigner ZD420-203dpi ZPL" },
+          "status": { "type": "string", "description": "Printer status", "example": "idle" }
+        }
+      },
+      "PrintRequest": {
+        "type": "object",
+        "required": ["zpl"],
+        "properties": {
+          "zpl": { "type": "string", "description": "Raw ZPL code (or text content for ESC/POS printers)" },
+          "copies": { "type": "integer", "minimum": 1, "description": "Number of copies", "default": 1 },
+          "applySettings": { "type": "boolean", "description": "Prepend printer setup commands", "default": true }
+        }
+      },
+      "EscPosRequest": {
+        "type": "object",
+        "required": ["commands"],
+        "properties": {
+          "commands": {
+            "type": "array",
+            "description": "Array of ESC/POS commands. Each command is `[method, ...args]`.",
+            "items": {
+              "type": "array",
+              "description": "Command as [method, ...args]. Available methods: initialize, line, raw, bold, underline, align, font, size, rule, columns, feed, cut, cashDrawer, codepage",
+              "items": {},
+              "example": ["line", "Hello World"]
+            }
+          },
+          "copies": { "type": "integer", "minimum": 1, "description": "Number of copies", "default": 1 }
+        }
+      },
+      "RawPrintRequest": {
+        "type": "object",
+        "required": ["host", "zpl"],
+        "properties": {
+          "host": { "type": "string", "description": "Printer IP address or hostname", "example": "192.168.1.100" },
+          "port": { "type": "integer", "description": "TCP port", "default": 9100 },
+          "zpl": { "type": "string", "description": "Raw data to send" }
+        }
+      },
+      "PrintResult": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "method": { "type": "string", "description": "Print method used", "enum": ["network", "cups", "windows-raw"], "example": "network" },
+          "host": { "type": "string", "description": "Printer host (network)", "example": "192.168.1.100" },
+          "port": { "type": "integer", "description": "Printer port (network)", "example": 9100 },
+          "queue": { "type": "string", "description": "CUPS queue name (CUPS)" },
+          "printer": { "type": "string", "description": "Windows printer name (Windows)" },
+          "output": { "type": "string", "description": "Command output (CUPS)" },
+          "detail": { "type": "string", "description": "Detail message (Windows)" }
+        }
+      },
+      "LabelPreset": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Preset identifier", "example": "4x6" },
+          "widthDots": { "type": "integer", "description": "Width in dots at 203 DPI", "example": 812 },
+          "heightDots": { "type": "integer", "description": "Height in dots at 203 DPI", "example": 1218 },
+          "desc": { "type": "string", "description": "Human-readable description", "example": "4\" x 6\" (shipping)" }
+        }
+      },
+      "PrinterProfile": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Profile identifier", "example": "epson" },
+          "name": { "type": "string", "description": "Display name", "example": "Epson" },
+          "features": {
+            "type": "object",
+            "description": "Supported features",
+            "properties": {
+              "cut": { "type": "boolean" },
+              "partialCut": { "type": "boolean" },
+              "cashDrawer": { "type": "boolean" },
+              "codePages": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "DebugInfo": {
+        "type": "object",
+        "properties": {
+          "printerId": { "type": "string" },
+          "printerName": { "type": "string" },
+          "type": { "type": "string" },
+          "host": { "type": "string", "nullable": true },
+          "port": { "type": "integer", "nullable": true },
+          "windowsPrinter": { "type": "string", "nullable": true },
+          "settings": {
+            "type": "object",
+            "properties": {
+              "language": { "type": "string" },
+              "paperWidth": { "type": "string" },
+              "autoCut": { "type": "boolean" },
+              "cutType": { "type": "string" },
+              "feedLines": { "type": "integer" },
+              "codepage": { "type": "string" },
+              "printerProfile": { "type": "string" }
+            }
+          },
+          "testPayloadHex": { "type": "string", "description": "Hex dump of what the test payload bytes look like", "example": "1b 40 54 65 73 74 20 6c 69 6e 65 0a" },
+          "testPayloadLength": { "type": "integer", "description": "Byte length of the test payload", "example": 12 }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "description": "Error message", "example": "Printer not found: invalid-id" }
+        }
+      }
+    }
+  }
+}

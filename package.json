@@ -20,6 +20,7 @@
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "swagger-ui-dist": "^5.32.0",
     "ws": "^8.19.0"
   }
 }
