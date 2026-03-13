@@ -36,7 +36,7 @@ public class PrinterSettings
 
     public void ApplyPreset()
     {
-        var preset = LabelPreset.Get(LabelPreset);
+        var preset = Models.LabelPreset.Get(LabelPreset);
         if (preset != null)
         {
             WidthDots = preset.WidthDots;
