@@ -36,6 +36,43 @@ app.get('/api/printers', (req, res) => {
   res.json(printer.getPrinters());
 });
 
+// Debug — shows settings + hex dump of what would be sent
+app.get('/api/printers/:id/debug', (req, res) => {
+  const p = printer.getPrinter(req.params.id);
+  if (!p) return res.status(404).json({ error: `Printer not found: ${req.params.id}` });
+  const s = p.settings || {};
+  const isEscPos = s.language === 'ESC/POS';
+  let payload;
+  if (isEscPos) {
+    const enc = new EscPosEncoder({ paperWidth: s.paperWidth, codepage: s.codepage || null });
+    enc.initialize();
+    enc.raw('Test line\n');
+    if (s.autoCut) enc.cut(s.cutType || 'partial', s.feedLines ?? 4);
+    payload = enc.encode();
+  } else {
+    payload = Buffer.from(printer.buildSetupZPL(s) + '\nTest line\n', 'utf8');
+  }
+  res.json({
+    printerId: p.id,
+    printerName: p.name,
+    type: p.type,
+    host: p.host,
+    port: p.port,
+    windowsPrinter: p.windowsPrinter,
+    settings: {
+      language: s.language,
+      paperWidth: s.paperWidth,
+      autoCut: s.autoCut,
+      cutType: s.cutType,
+      feedLines: s.feedLines,
+      codepage: s.codepage,
+      printerProfile: s.printerProfile,
+    },
+    testPayloadHex: Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join(' '),
+    testPayloadLength: payload.length,
+  });
+});
+
 // Discover system printers (Windows + macOS/Linux)
 app.get('/api/printers/discover', async (req, res) => {
   try {

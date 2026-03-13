@@ -149,6 +149,58 @@ public class HttpServer
             return;
         }
 
+        // GET /api/printers/{id}/debug — shows settings + hex dump of what would be sent
+        if (method == "GET" && path.StartsWith("/api/printers/") && path.EndsWith("/debug"))
+        {
+            var id = ExtractSegment(path, 2);
+            var printer = _store.GetPrinter(id);
+            if (printer == null)
+            {
+                await WriteJson(res, 404, new { error = $"Printer not found: {id}" });
+                return;
+            }
+            var s = printer.Settings;
+            var testContent = "Test line\n";
+            var isEscPos = s.Language == "ESC/POS";
+            byte[] payload;
+            if (isEscPos)
+            {
+                var enc = new EscPosEncoder(s.PaperWidth);
+                enc.Initialize();
+                if (!string.IsNullOrEmpty(s.Codepage)) enc.Codepage(s.Codepage);
+                enc.Raw(testContent);
+                if (s.AutoCut) enc.Cut(s.CutType ?? "partial", s.FeedLines);
+                payload = enc.Encode();
+            }
+            else
+            {
+                payload = Encoding.UTF8.GetBytes(s.BuildSetupZPL() + "\n" + testContent);
+            }
+            var hex = BitConverter.ToString(payload).Replace("-", " ");
+            await WriteJson(res, 200, new
+            {
+                printerId = id,
+                printerName = printer.Name,
+                type = printer.Type,
+                host = printer.Host,
+                port = printer.Port,
+                windowsPrinter = printer.WindowsPrinter,
+                settings = new
+                {
+                    language = s.Language,
+                    paperWidth = s.PaperWidth,
+                    autoCut = s.AutoCut,
+                    cutType = s.CutType,
+                    feedLines = s.FeedLines,
+                    codepage = s.Codepage,
+                    printerProfile = s.PrinterProfile,
+                },
+                testPayloadHex = hex,
+                testPayloadLength = payload.Length,
+            });
+            return;
+        }
+
         // GET /api/printers/discover
         if (method == "GET" && path == "/api/printers/discover")
         {
