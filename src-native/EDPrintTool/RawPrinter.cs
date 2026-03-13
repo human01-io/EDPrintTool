@@ -38,9 +38,9 @@ public static class RawPrinter
     [DllImport("winspool.drv", SetLastError = true)]
     private static extern bool ClosePrinter(IntPtr hPrinter);
 
-    // ─── Print to Windows USB printer via raw spooler ───────────
+    // ─── Send raw bytes to Windows USB printer via spooler ──────
 
-    public static Task<string> PrintWindowsAsync(string printerName, string zpl)
+    public static Task<string> PrintWindowsRawAsync(string printerName, byte[] data)
     {
         return Task.Run(() =>
         {
@@ -72,7 +72,6 @@ public static class RawPrinter
 
                     try
                     {
-                        var data = Encoding.UTF8.GetBytes(zpl);
                         var pBytes = Marshal.AllocCoTaskMem(data.Length);
                         try
                         {
@@ -106,22 +105,27 @@ public static class RawPrinter
         });
     }
 
+    public static Task<string> PrintWindowsAsync(string printerName, string text)
+        => PrintWindowsRawAsync(printerName, Encoding.UTF8.GetBytes(text));
+
     // ─── Print to network printer via TCP port 9100 ─────────────
 
-    public static async Task<string> PrintNetworkAsync(string host, int port, string zpl)
+    public static async Task<string> PrintNetworkRawAsync(string host, int port, byte[] data)
     {
         using var client = new TcpClient();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 
         await client.ConnectAsync(host, port, cts.Token);
         var stream = client.GetStream();
-        var data = Encoding.UTF8.GetBytes(zpl);
         await stream.WriteAsync(data, cts.Token);
         await stream.FlushAsync(cts.Token);
         client.Close();
 
-        return $"Sent to {host}:{port}";
+        return $"Sent {data.Length} bytes to {host}:{port}";
     }
+
+    public static Task<string> PrintNetworkAsync(string host, int port, string text)
+        => PrintNetworkRawAsync(host, port, Encoding.UTF8.GetBytes(text));
 
     // ─── Print to CUPS printer (macOS/Linux) ────────────────────
 
@@ -155,38 +159,69 @@ public static class RawPrinter
     // ─── Main dispatcher ────────────────────────────────────────
 
     public static async Task<string> PrintAsync(
-        PrinterInfo printer, string zpl, int copies = 1, bool applySettings = true)
+        PrinterInfo printer, string content, int copies = 1, bool applySettings = true)
     {
-        var payload = new StringBuilder();
+        var isEscPos = printer.Settings.Language == "ESC/POS";
 
-        if (applySettings)
+        byte[] rawData;
+
+        if (isEscPos)
         {
-            payload.AppendLine(printer.Settings.BuildSetupZPL());
+            rawData = BuildEscPosPayload(printer.Settings, content, copies, applySettings);
         }
-
-        for (int i = 0; i < copies; i++)
+        else
         {
-            payload.Append(zpl);
-            if (i < copies - 1) payload.AppendLine();
+            // ZPL: text-based payload
+            var payload = new StringBuilder();
+            if (applySettings)
+                payload.AppendLine(printer.Settings.BuildSetupZPL());
+            for (int i = 0; i < copies; i++)
+            {
+                payload.Append(content);
+                if (i < copies - 1) payload.AppendLine();
+            }
+            rawData = Encoding.UTF8.GetBytes(payload.ToString());
         }
-
-        var data = payload.ToString();
 
         return printer.Type switch
         {
-            "network" => await PrintNetworkAsync(
+            "network" => await PrintNetworkRawAsync(
                 printer.Host ?? throw new Exception($"No host for printer: {printer.Id}"),
-                printer.Port, data),
+                printer.Port, rawData),
 
-            "usb" when OperatingSystem.IsWindows() => await PrintWindowsAsync(
+            "usb" when OperatingSystem.IsWindows() => await PrintWindowsRawAsync(
                 printer.WindowsPrinter ?? throw new Exception($"No Windows printer name for: {printer.Id}"),
-                data),
+                rawData),
 
             "usb" => await PrintCupsAsync(
                 printer.CupsQueue ?? throw new Exception($"No CUPS queue for: {printer.Id}"),
-                data),
+                Encoding.UTF8.GetString(rawData)),
 
             _ => throw new Exception($"Unknown printer type: {printer.Type}")
         };
+    }
+
+    /// <summary>
+    /// Build a complete ESC/POS byte payload: init + content × copies + feed + cut
+    /// </summary>
+    private static byte[] BuildEscPosPayload(PrinterSettings settings, string content, int copies, bool applySettings)
+    {
+        using var ms = new MemoryStream();
+
+        for (int i = 0; i < copies; i++)
+        {
+            // Init printer
+            if (applySettings)
+                ms.Write(settings.BuildEscPosInit());
+
+            // Content as UTF-8 bytes
+            ms.Write(Encoding.UTF8.GetBytes(content));
+
+            // Feed + cut
+            if (applySettings)
+                ms.Write(settings.BuildEscPosCut());
+        }
+
+        return ms.ToArray();
     }
 }

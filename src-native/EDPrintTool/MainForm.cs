@@ -35,6 +35,7 @@ public class MainForm : Form
 
     // Settings panel controls
     private readonly GroupBox _settingsGroup;
+    private readonly ComboBox _setLanguage;
     private readonly ComboBox _setPreset;
     private readonly NumericUpDown _setWidth;
     private readonly NumericUpDown _setHeight;
@@ -45,6 +46,14 @@ public class MainForm : Form
     private readonly ComboBox _setMediaType;
     private readonly ComboBox _setPrintMode;
     private readonly ComboBox _setOrientation;
+    // ESC/POS settings
+    private readonly ComboBox _setPaperWidth;
+    private readonly CheckBox _setAutoCut;
+    private readonly ComboBox _setCutType;
+    private readonly NumericUpDown _setFeedLines;
+    // Panels for showing/hiding per language
+    private readonly Panel _zplSettingsPanel;
+    private readonly Panel _escposSettingsPanel;
     private string? _selectedPrinterId;
 
     public MainForm(PrinterStore store, HttpServer server)
@@ -130,12 +139,13 @@ public class MainForm : Form
             BorderStyle = BorderStyle.FixedSingle,
             Font = new Font("Segoe UI", 9),
         };
-        _printerList.Columns.Add("Name", 200);
-        _printerList.Columns.Add("Type", 80);
-        _printerList.Columns.Add("Connection", 250);
-        _printerList.Columns.Add("Label Size", 120);
-        _printerList.Columns.Add("Darkness", 70);
-        _printerList.Columns.Add("Speed", 60);
+        _printerList.Columns.Add("Name", 180);
+        _printerList.Columns.Add("Language", 75);
+        _printerList.Columns.Add("Type", 60);
+        _printerList.Columns.Add("Connection", 220);
+        _printerList.Columns.Add("Label/Paper", 110);
+        _printerList.Columns.Add("Darkness", 65);
+        _printerList.Columns.Add("Speed", 55);
 
         var settingsBtn = CreateButton("Settings", 10, 165);
         settingsBtn.Width = 100;
@@ -154,62 +164,103 @@ public class MainForm : Form
         layout.Controls.Add(listGroup);
 
         // ─── Settings Panel ─────────────────────────
-        _settingsGroup = CreateGroupBox("PRINTER SETTINGS", 220);
+        _settingsGroup = CreateGroupBox("PRINTER SETTINGS", 250);
         _settingsGroup.Visible = false;
 
         var normalFont = new Font("Segoe UI", 9, FontStyle.Regular);
 
-        // Row 1: Preset, Width, Height, DPI
-        var presetLbl = new Label { Text = "Label Preset:", Left = 10, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setPreset = new ComboBox { Left = 10, Top = 43, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        // Language selector (top of settings)
+        var langLbl = new Label { Text = "Printer Language:", Left = 10, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setLanguage = new ComboBox { Left = 130, Top = 22, Width = 130, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setLanguage.Items.AddRange(new object[] { "ZPL (Label)", "ESC/POS (Receipt)" });
+        _setLanguage.SelectedIndexChanged += (_, _) => OnLanguageChanged();
+
+        var settingsPrinterLabel = new Label { Text = "", Left = 280, Top = 25, ForeColor = AccentColor, AutoSize = true, Font = normalFont, Name = "settingsPrinterLabel" };
+
+        // ─── ZPL settings sub-panel ─────────────────
+        _zplSettingsPanel = new Panel { Left = 0, Top = 48, Width = 910, Height = 120, BackColor = Color.Transparent };
+
+        var presetLbl = new Label { Text = "Label Preset:", Left = 10, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setPreset = new ComboBox { Left = 10, Top = 20, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
         foreach (var p in LabelPreset.GetAll())
             _setPreset.Items.Add(new PresetItem(p.Id, $"{p.Desc} ({p.Id})"));
         _setPreset.Items.Add(new PresetItem("custom", "Custom"));
         _setPreset.SelectedIndexChanged += (_, _) => OnPresetChanged();
 
-        var widthLbl = new Label { Text = "Width (dots):", Left = 250, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setWidth = new NumericUpDown { Left = 250, Top = 43, Width = 100, Minimum = 50, Maximum = 5000, BackColor = BgColor, ForeColor = TextColor, Enabled = false };
+        var widthLbl = new Label { Text = "Width (dots):", Left = 250, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setWidth = new NumericUpDown { Left = 250, Top = 20, Width = 100, Minimum = 50, Maximum = 5000, BackColor = BgColor, ForeColor = TextColor, Enabled = false };
 
-        var heightLbl = new Label { Text = "Height (dots):", Left = 370, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setHeight = new NumericUpDown { Left = 370, Top = 43, Width = 100, Minimum = 50, Maximum = 5000, BackColor = BgColor, ForeColor = TextColor, Enabled = false };
+        var heightLbl = new Label { Text = "Height (dots):", Left = 370, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setHeight = new NumericUpDown { Left = 370, Top = 20, Width = 100, Minimum = 50, Maximum = 5000, BackColor = BgColor, ForeColor = TextColor, Enabled = false };
 
-        var dpiLbl = new Label { Text = "DPI:", Left = 490, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setDpi = new ComboBox { Left = 490, Top = 43, Width = 70, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        var dpiLbl = new Label { Text = "DPI:", Left = 490, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setDpi = new ComboBox { Left = 490, Top = 20, Width = 70, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
         _setDpi.Items.AddRange(new object[] { "203", "300" });
 
-        // Row 2: Darkness, Speed, Media Type, Print Mode, Orientation
-        var darkLbl = new Label { Text = "Darkness (0-30):", Left = 10, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setDarkness = new TrackBar { Left = 10, Top = 96, Width = 200, Minimum = 0, Maximum = 30, TickFrequency = 5, BackColor = SurfaceColor };
-        _darknessValue = new Label { Text = "15", Left = 215, Top = 100, ForeColor = TextColor, AutoSize = true, Font = normalFont };
+        var darkLbl = new Label { Text = "Darkness (0-30):", Left = 10, Top = 55, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setDarkness = new TrackBar { Left = 10, Top = 73, Width = 200, Minimum = 0, Maximum = 30, TickFrequency = 5, BackColor = SurfaceColor };
+        _darknessValue = new Label { Text = "15", Left = 215, Top = 77, ForeColor = TextColor, AutoSize = true, Font = normalFont };
         _setDarkness.ValueChanged += (_, _) => _darknessValue.Text = _setDarkness.Value.ToString();
 
-        var speedLbl = new Label { Text = "Speed (in/sec):", Left = 260, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setSpeed = new NumericUpDown { Left = 260, Top = 96, Width = 70, Minimum = 2, Maximum = 14, BackColor = BgColor, ForeColor = TextColor };
+        var speedLbl = new Label { Text = "Speed (in/sec):", Left = 260, Top = 55, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setSpeed = new NumericUpDown { Left = 260, Top = 73, Width = 70, Minimum = 2, Maximum = 14, BackColor = BgColor, ForeColor = TextColor };
 
-        var mediaLbl = new Label { Text = "Media Type:", Left = 350, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setMediaType = new ComboBox { Left = 350, Top = 96, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        var mediaLbl = new Label { Text = "Media Type:", Left = 350, Top = 55, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setMediaType = new ComboBox { Left = 350, Top = 73, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
         _setMediaType.Items.AddRange(new object[] { "Direct Thermal (D)", "Thermal Transfer (T)" });
 
-        var modeLbl = new Label { Text = "Print Mode:", Left = 510, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setPrintMode = new ComboBox { Left = 510, Top = 96, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        var modeLbl = new Label { Text = "Print Mode:", Left = 510, Top = 55, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setPrintMode = new ComboBox { Left = 510, Top = 73, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
         _setPrintMode.Items.AddRange(new object[] { "Tear-Off (T)", "Peel-Off (P)", "Cutter (C)" });
 
-        var orientLbl = new Label { Text = "Orientation:", Left = 650, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
-        _setOrientation = new ComboBox { Left = 650, Top = 96, Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        var orientLbl = new Label { Text = "Orientation:", Left = 650, Top = 55, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setOrientation = new ComboBox { Left = 650, Top = 73, Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
         _setOrientation.Items.AddRange(new object[] { "Normal (N)", "Rotated 90 (R)", "Inverted 180 (I)", "Bottom-Up 270 (B)" });
 
-        var saveSettingsBtn = CreateButton("Save Settings", 10, 140);
-        saveSettingsBtn.Width = 120;
-        saveSettingsBtn.Click += (_, _) => SaveSettings();
-
-        var settingsPrinterLabel = new Label { Text = "", Left = 140, Top = 148, ForeColor = AccentColor, AutoSize = true, Font = normalFont, Name = "settingsPrinterLabel" };
-
-        _settingsGroup.Controls.AddRange(new Control[]
+        _zplSettingsPanel.Controls.AddRange(new Control[]
         {
             presetLbl, _setPreset, widthLbl, _setWidth, heightLbl, _setHeight, dpiLbl, _setDpi,
             darkLbl, _setDarkness, _darknessValue, speedLbl, _setSpeed,
             mediaLbl, _setMediaType, modeLbl, _setPrintMode, orientLbl, _setOrientation,
-            saveSettingsBtn, settingsPrinterLabel,
+        });
+
+        // ─── ESC/POS settings sub-panel ─────────────
+        _escposSettingsPanel = new Panel { Left = 0, Top = 48, Width = 910, Height = 120, BackColor = Color.Transparent, Visible = false };
+
+        var pwLbl = new Label { Text = "Paper Width:", Left = 10, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setPaperWidth = new ComboBox { Left = 10, Top = 20, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setPaperWidth.Items.AddRange(new object[] { "80mm", "58mm" });
+
+        _setAutoCut = new CheckBox { Text = "Auto Cut", Left = 160, Top = 22, ForeColor = TextColor, AutoSize = true, Font = normalFont, Checked = true };
+
+        var cutLbl = new Label { Text = "Cut Type:", Left = 280, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setCutType = new ComboBox { Left = 280, Top = 20, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setCutType.Items.AddRange(new object[] { "Partial", "Full" });
+
+        var feedLbl = new Label { Text = "Feed Lines:", Left = 420, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setFeedLines = new NumericUpDown { Left = 420, Top = 20, Width = 70, Minimum = 0, Maximum = 20, Value = 4, BackColor = BgColor, ForeColor = TextColor };
+
+        var escHint = new Label
+        {
+            Text = "ESC/POS: Send plain text for receipts. The printer will initialize, print your text, feed, and auto-cut.",
+            Left = 10, Top = 60, Width = 880, ForeColor = MutedColor, AutoSize = false, Height = 40, Font = normalFont,
+        };
+
+        _escposSettingsPanel.Controls.AddRange(new Control[]
+        {
+            pwLbl, _setPaperWidth, _setAutoCut, cutLbl, _setCutType, feedLbl, _setFeedLines, escHint,
+        });
+
+        // Save button
+        var saveSettingsBtn = CreateButton("Save Settings", 10, 178);
+        saveSettingsBtn.Width = 120;
+        saveSettingsBtn.Click += (_, _) => SaveSettings();
+
+        _settingsGroup.Controls.AddRange(new Control[]
+        {
+            langLbl, _setLanguage, settingsPrinterLabel,
+            _zplSettingsPanel, _escposSettingsPanel,
+            saveSettingsBtn,
         });
         layout.Controls.Add(_settingsGroup);
 
@@ -242,11 +293,17 @@ public class MainForm : Form
         var printBtn = CreateButton("Print Label", 10, 220);
         printBtn.Click += async (_, _) => await PrintLabel();
 
-        var sampleBtn = CreateButton("Load Sample ZPL", 140, 220);
+        var sampleBtn = CreateButton("Sample ZPL", 140, 220);
+        sampleBtn.Width = 100;
         sampleBtn.BackColor = BorderColor;
         sampleBtn.Click += (_, _) => LoadSampleZpl();
 
-        printGroup.Controls.AddRange(new Control[] { targetLabel, _printTarget, copiesLabel, _copiesInput, zplLabel, _zplInput, printBtn, sampleBtn });
+        var sampleReceiptBtn = CreateButton("Sample Receipt", 250, 220);
+        sampleReceiptBtn.Width = 110;
+        sampleReceiptBtn.BackColor = BorderColor;
+        sampleReceiptBtn.Click += (_, _) => LoadSampleReceipt();
+
+        printGroup.Controls.AddRange(new Control[] { targetLabel, _printTarget, copiesLabel, _copiesInput, zplLabel, _zplInput, printBtn, sampleBtn, sampleReceiptBtn });
         layout.Controls.Add(printGroup);
 
         // ─── Quick Print ─────────────────────────────
@@ -404,6 +461,34 @@ public class MainForm : Form
         }
     }
 
+    private void LoadSampleReceipt()
+    {
+        _zplInput.Text =
+            "================================\r\n" +
+            "        EDPrintTool Demo        \r\n" +
+            "      Receipt Printer Test      \r\n" +
+            "================================\r\n" +
+            "Date: 2026-03-13  Time: 14:30\r\n" +
+            "Cashier: Admin\r\n" +
+            "--------------------------------\r\n" +
+            "Item              Qty     Price\r\n" +
+            "--------------------------------\r\n" +
+            "Widget A            2     $9.99\r\n" +
+            "Widget B            1    $14.99\r\n" +
+            "Service Fee         1     $2.50\r\n" +
+            "--------------------------------\r\n" +
+            "Subtotal:                $37.47\r\n" +
+            "Tax (8%):                 $3.00\r\n" +
+            "================================\r\n" +
+            "TOTAL:                   $40.47\r\n" +
+            "================================\r\n" +
+            "\r\n" +
+            "   Thank you for your visit!    \r\n" +
+            "      www.edprinttool.com       \r\n" +
+            "\r\n";
+        LogMessage("Sample receipt loaded (set printer to ESC/POS mode)", false);
+    }
+
     private void LoadSampleZpl()
     {
         _zplInput.Text = @"^XA
@@ -468,7 +553,11 @@ public class MainForm : Form
     {
         var s = printer.Settings;
 
-        // Label preset
+        // Language
+        _setLanguage.SelectedIndex = s.Language == "ESC/POS" ? 1 : 0;
+        OnLanguageChanged();
+
+        // ZPL settings
         for (int i = 0; i < _setPreset.Items.Count; i++)
         {
             if (_setPreset.Items[i] is PresetItem pi && pi.Id == s.LabelPreset)
@@ -481,19 +570,27 @@ public class MainForm : Form
         _setDarkness.Value = Math.Clamp(s.Darkness, 0, 30);
         _darknessValue.Text = s.Darkness.ToString();
         _setSpeed.Value = Math.Clamp(s.Speed, 2, 14);
-
-        // Media type: D or T
         _setMediaType.SelectedIndex = s.MediaType == "D" ? 0 : 1;
-
-        // Print mode: T, P, C
         _setPrintMode.SelectedIndex = s.PrintMode switch { "P" => 1, "C" => 2, _ => 0 };
-
-        // Orientation: N, R, I, B
         _setOrientation.SelectedIndex = s.Orientation switch { "R" => 1, "I" => 2, "B" => 3, _ => 0 };
+
+        // ESC/POS settings
+        _setPaperWidth.SelectedItem = s.PaperWidth;
+        if (_setPaperWidth.SelectedIndex < 0) _setPaperWidth.SelectedIndex = 0;
+        _setAutoCut.Checked = s.AutoCut;
+        _setCutType.SelectedIndex = s.CutType == "full" ? 1 : 0;
+        _setFeedLines.Value = Math.Clamp(s.FeedLines, 0, 20);
 
         // Show which printer is being configured
         var label = _settingsGroup.Controls.Find("settingsPrinterLabel", false).FirstOrDefault();
         if (label != null) label.Text = $"Editing: {printer.Name}";
+    }
+
+    private void OnLanguageChanged()
+    {
+        bool isEscPos = _setLanguage.SelectedIndex == 1;
+        _zplSettingsPanel.Visible = !isEscPos;
+        _escposSettingsPanel.Visible = isEscPos;
     }
 
     private void OnPresetChanged()
@@ -520,6 +617,7 @@ public class MainForm : Form
     {
         if (_selectedPrinterId == null) return;
 
+        var language = _setLanguage.SelectedIndex == 1 ? "ESC/POS" : "ZPL";
         var presetId = (_setPreset.SelectedItem as PresetItem)?.Id ?? "4x6";
         var mediaCode = _setMediaType.SelectedIndex == 0 ? "D" : "T";
         var modeCode = _setPrintMode.SelectedIndex switch { 1 => "P", 2 => "C", _ => "T" };
@@ -527,6 +625,8 @@ public class MainForm : Form
 
         var partial = new System.Text.Json.Nodes.JsonObject
         {
+            ["language"] = language,
+            // ZPL settings
             ["labelPreset"] = presetId,
             ["widthDots"] = (int)_setWidth.Value,
             ["heightDots"] = (int)_setHeight.Value,
@@ -536,6 +636,11 @@ public class MainForm : Form
             ["mediaType"] = mediaCode,
             ["printMode"] = modeCode,
             ["orientation"] = orientCode,
+            // ESC/POS settings
+            ["paperWidth"] = _setPaperWidth.SelectedItem?.ToString() ?? "80mm",
+            ["autoCut"] = _setAutoCut.Checked,
+            ["cutType"] = _setCutType.SelectedIndex == 1 ? "full" : "partial",
+            ["feedLines"] = (int)_setFeedLines.Value,
         };
 
         var updated = _store.UpdateSettings(_selectedPrinterId, partial);
@@ -569,12 +674,15 @@ public class MainForm : Form
             var preset = LabelPreset.Get(s.LabelPreset);
             var sizeStr = preset?.Desc ?? $"{s.WidthDots}x{s.HeightDots}";
 
+            var sizeOrPaper = s.Language == "ESC/POS" ? s.PaperWidth : sizeStr;
+
             var item = new ListViewItem(p.Name) { Tag = p.Id, ForeColor = TextColor };
+            item.SubItems.Add(s.Language);
             item.SubItems.Add(p.Type);
             item.SubItems.Add(conn);
-            item.SubItems.Add(sizeStr);
-            item.SubItems.Add(s.Darkness.ToString());
-            item.SubItems.Add(s.Speed.ToString());
+            item.SubItems.Add(sizeOrPaper);
+            item.SubItems.Add(s.Language == "ESC/POS" ? "-" : s.Darkness.ToString());
+            item.SubItems.Add(s.Language == "ESC/POS" ? "-" : s.Speed.ToString());
             _printerList.Items.Add(item);
 
             _printTarget.Items.Add(new ComboItem(p.Id, p.Name));

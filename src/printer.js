@@ -75,6 +75,7 @@ function getLabelPresets() {
 // ─── Printer CRUD ────────────────────────────────────────────
 
 const DEFAULT_SETTINGS = {
+  language: 'ZPL',            // 'ZPL' or 'ESC/POS'
   labelPreset: '4x6',        // preset name or 'custom'
   widthDots: 812,             // label width in dots
   heightDots: 1218,           // label height in dots
@@ -85,7 +86,35 @@ const DEFAULT_SETTINGS = {
   mediaType: 'T',             // T=thermal transfer, D=direct thermal
   printMode: 'T',             // T=tear-off, P=peel-off, C=cutter
   encoding: 'UTF-8',
+  // ESC/POS settings
+  paperWidth: '80mm',         // '80mm' or '58mm'
+  autoCut: true,              // send cut command after print
+  cutType: 'partial',         // 'full' or 'partial'
+  feedLines: 4,               // lines to feed before cut
 };
+
+// ─── ESC/POS helpers ──────────────────────────────────────────
+function buildEscPosInit() {
+  // ESC @ — Initialize printer
+  return Buffer.from([0x1B, 0x40]);
+}
+
+function buildEscPosCut(settings) {
+  const bytes = [];
+  // ESC d n — Print and feed n lines
+  if (settings.feedLines > 0) {
+    bytes.push(0x1B, 0x64, Math.min(settings.feedLines, 255));
+  }
+  // GS V — Cut paper
+  if (settings.autoCut) {
+    if (settings.cutType === 'full') {
+      bytes.push(0x1D, 0x56, 0x00); // GS V 0 = full cut
+    } else {
+      bytes.push(0x1D, 0x56, 0x01); // GS V 1 = partial cut
+    }
+  }
+  return Buffer.from(bytes);
+}
 
 function addPrinter({ id, name, type, host, port, cupsQueue, windowsPrinter, settings }) {
   const printer = {
@@ -426,25 +455,35 @@ function discoverCUPSPrinters() {
 
 // ─── Main print dispatcher ──────────────────────────────────
 
-async function print(printerId, zpl, options = {}) {
+async function print(printerId, content, options = {}) {
   const p = printers.get(printerId);
   if (!p) throw new Error(`Printer not found: ${printerId}`);
 
-  // Build the full payload: setup commands + user ZPL
-  const applySettings = options.applySettings !== false; // default true
+  const applySettings = options.applySettings !== false;
   const copies = options.copies || 1;
+  const isEscPos = p.settings && p.settings.language === 'ESC/POS';
 
-  let payload = '';
+  let payload;
 
-  // Prepend printer setup ZPL (label size, darkness, speed, etc.)
-  if (applySettings && p.settings) {
-    payload += buildSetupZPL(p.settings) + '\n';
-  }
-
-  // Repeat ZPL for copies
-  for (let i = 0; i < copies; i++) {
-    payload += zpl;
-    if (i < copies - 1) payload += '\n';
+  if (isEscPos) {
+    // ESC/POS: build binary payload with init + content + feed + cut
+    const parts = [];
+    for (let i = 0; i < copies; i++) {
+      if (applySettings) parts.push(buildEscPosInit());
+      parts.push(Buffer.from(content, 'utf8'));
+      if (applySettings) parts.push(buildEscPosCut(p.settings));
+    }
+    payload = Buffer.concat(parts).toString('binary');
+  } else {
+    // ZPL: text-based payload
+    payload = '';
+    if (applySettings && p.settings) {
+      payload += buildSetupZPL(p.settings) + '\n';
+    }
+    for (let i = 0; i < copies; i++) {
+      payload += content;
+      if (i < copies - 1) payload += '\n';
+    }
   }
 
   if (p.type === 'network') {

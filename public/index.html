@@ -210,8 +210,9 @@
         </div>
       </div>
       <div class="actions">
-        <button class="btn-primary" onclick="printLabel()">Print Label</button>
-        <button class="btn-secondary" onclick="loadSample()">Load Sample ZPL</button>
+        <button class="btn-primary" onclick="printLabel()">Print</button>
+        <button class="btn-secondary" onclick="loadSample()">Sample ZPL</button>
+        <button class="btn-secondary" onclick="loadSampleReceipt()">Sample Receipt</button>
       </div>
     </div>
 
@@ -400,61 +401,106 @@
               </div>
               <div class="settings-panel" id="sp-${p.id}">
                 <div class="row">
-                  <div>
-                    <label>Label Size Preset</label>
-                    <select onchange="onPresetChange('${p.id}', this.value)" id="sel-preset-${p.id}">
-                      ${presetOptions(s.labelPreset || '4x6')}
-                    </select>
-                  </div>
-                  <div>
-                    <label>Width (dots)</label>
-                    <input type="number" id="set-w-${p.id}" value="${s.widthDots || 812}" ${s.labelPreset !== 'custom' ? 'disabled' : ''}>
-                  </div>
-                  <div>
-                    <label>Height (dots)</label>
-                    <input type="number" id="set-h-${p.id}" value="${s.heightDots || 1218}" ${s.labelPreset !== 'custom' ? 'disabled' : ''}>
-                  </div>
-                  <div style="flex:0 0 80px">
-                    <label>DPI</label>
-                    <select id="set-dpi-${p.id}">
-                      <option value="203" ${s.dpi == 203 ? 'selected' : ''}>203</option>
-                      <option value="300" ${s.dpi == 300 ? 'selected' : ''}>300</option>
+                  <div style="flex:0 0 180px">
+                    <label>Printer Language</label>
+                    <select id="set-lang-${p.id}" onchange="onLangChange('${p.id}', this.value)">
+                      <option value="ZPL" ${(s.language || 'ZPL') === 'ZPL' ? 'selected' : ''}>ZPL (Label)</option>
+                      <option value="ESC/POS" ${s.language === 'ESC/POS' ? 'selected' : ''}>ESC/POS (Receipt)</option>
                     </select>
                   </div>
                 </div>
-                <div class="row">
-                  <div>
-                    <label>Darkness (0-30)</label>
-                    <input type="range" id="set-dark-${p.id}" min="0" max="30" value="${s.darkness || 15}" oninput="document.getElementById('dark-val-${p.id}').textContent=this.value" style="padding:4px 0">
-                    <span style="font-size:12px;color:var(--muted)" id="dark-val-${p.id}">${s.darkness || 15}</span>
+                <!-- ZPL Settings -->
+                <div id="zpl-settings-${p.id}" style="${s.language === 'ESC/POS' ? 'display:none' : ''}">
+                  <div class="row">
+                    <div>
+                      <label>Label Size Preset</label>
+                      <select onchange="onPresetChange('${p.id}', this.value)" id="sel-preset-${p.id}">
+                        ${presetOptions(s.labelPreset || '4x6')}
+                      </select>
+                    </div>
+                    <div>
+                      <label>Width (dots)</label>
+                      <input type="number" id="set-w-${p.id}" value="${s.widthDots || 812}" ${s.labelPreset !== 'custom' ? 'disabled' : ''}>
+                    </div>
+                    <div>
+                      <label>Height (dots)</label>
+                      <input type="number" id="set-h-${p.id}" value="${s.heightDots || 1218}" ${s.labelPreset !== 'custom' ? 'disabled' : ''}>
+                    </div>
+                    <div style="flex:0 0 80px">
+                      <label>DPI</label>
+                      <select id="set-dpi-${p.id}">
+                        <option value="203" ${s.dpi == 203 ? 'selected' : ''}>203</option>
+                        <option value="300" ${s.dpi == 300 ? 'selected' : ''}>300</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label>Speed (in/sec, 2-14)</label>
-                    <input type="number" id="set-speed-${p.id}" value="${s.speed || 4}" min="2" max="14">
+                  <div class="row">
+                    <div>
+                      <label>Darkness (0-30)</label>
+                      <input type="range" id="set-dark-${p.id}" min="0" max="30" value="${s.darkness || 15}" oninput="document.getElementById('dark-val-${p.id}').textContent=this.value" style="padding:4px 0">
+                      <span style="font-size:12px;color:var(--muted)" id="dark-val-${p.id}">${s.darkness || 15}</span>
+                    </div>
+                    <div>
+                      <label>Speed (in/sec, 2-14)</label>
+                      <input type="number" id="set-speed-${p.id}" value="${s.speed || 4}" min="2" max="14">
+                    </div>
+                    <div>
+                      <label>Media Type</label>
+                      <select id="set-media-${p.id}">
+                        <option value="D" ${s.mediaType === 'D' ? 'selected' : ''}>Direct Thermal</option>
+                        <option value="T" ${s.mediaType === 'T' ? 'selected' : ''}>Thermal Transfer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Print Mode</label>
+                      <select id="set-mode-${p.id}">
+                        <option value="T" ${s.printMode === 'T' ? 'selected' : ''}>Tear-Off</option>
+                        <option value="P" ${s.printMode === 'P' ? 'selected' : ''}>Peel-Off</option>
+                        <option value="C" ${s.printMode === 'C' ? 'selected' : ''}>Cutter</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label>Orientation</label>
+                      <select id="set-orient-${p.id}">
+                        <option value="N" ${s.orientation === 'N' ? 'selected' : ''}>Normal</option>
+                        <option value="R" ${s.orientation === 'R' ? 'selected' : ''}>Rotated 90</option>
+                        <option value="I" ${s.orientation === 'I' ? 'selected' : ''}>Inverted 180</option>
+                        <option value="B" ${s.orientation === 'B' ? 'selected' : ''}>Bottom-Up 270</option>
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label>Media Type</label>
-                    <select id="set-media-${p.id}">
-                      <option value="D" ${s.mediaType === 'D' ? 'selected' : ''}>Direct Thermal</option>
-                      <option value="T" ${s.mediaType === 'T' ? 'selected' : ''}>Thermal Transfer</option>
-                    </select>
+                </div>
+                <!-- ESC/POS Settings -->
+                <div id="escpos-settings-${p.id}" style="${s.language === 'ESC/POS' ? '' : 'display:none'}">
+                  <div class="row">
+                    <div style="flex:0 0 140px">
+                      <label>Paper Width</label>
+                      <select id="set-pw-${p.id}">
+                        <option value="80mm" ${(s.paperWidth || '80mm') === '80mm' ? 'selected' : ''}>80mm</option>
+                        <option value="58mm" ${s.paperWidth === '58mm' ? 'selected' : ''}>58mm</option>
+                      </select>
+                    </div>
+                    <div style="flex:0 0 120px">
+                      <label>Auto Cut</label>
+                      <select id="set-autocut-${p.id}">
+                        <option value="true" ${s.autoCut !== false ? 'selected' : ''}>Yes</option>
+                        <option value="false" ${s.autoCut === false ? 'selected' : ''}>No</option>
+                      </select>
+                    </div>
+                    <div style="flex:0 0 140px">
+                      <label>Cut Type</label>
+                      <select id="set-cuttype-${p.id}">
+                        <option value="partial" ${(s.cutType || 'partial') === 'partial' ? 'selected' : ''}>Partial</option>
+                        <option value="full" ${s.cutType === 'full' ? 'selected' : ''}>Full</option>
+                      </select>
+                    </div>
+                    <div style="flex:0 0 120px">
+                      <label>Feed Lines</label>
+                      <input type="number" id="set-feed-${p.id}" value="${s.feedLines != null ? s.feedLines : 4}" min="0" max="20">
+                    </div>
                   </div>
-                  <div>
-                    <label>Print Mode</label>
-                    <select id="set-mode-${p.id}">
-                      <option value="T" ${s.printMode === 'T' ? 'selected' : ''}>Tear-Off</option>
-                      <option value="P" ${s.printMode === 'P' ? 'selected' : ''}>Peel-Off</option>
-                      <option value="C" ${s.printMode === 'C' ? 'selected' : ''}>Cutter</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label>Orientation</label>
-                    <select id="set-orient-${p.id}">
-                      <option value="N" ${s.orientation === 'N' ? 'selected' : ''}>Normal</option>
-                      <option value="R" ${s.orientation === 'R' ? 'selected' : ''}>Rotated 90</option>
-                      <option value="I" ${s.orientation === 'I' ? 'selected' : ''}>Inverted 180</option>
-                      <option value="B" ${s.orientation === 'B' ? 'selected' : ''}>Bottom-Up 270</option>
-                    </select>
+                  <div class="hint" style="margin-top:8px">
+                    <strong>ESC/POS mode:</strong> Send plain text for receipts. The printer will initialize, print your text, feed lines, and auto-cut.
                   </div>
                 </div>
                 <div class="actions">
@@ -477,6 +523,11 @@
       el.classList.toggle('open');
     }
 
+    function onLangChange(id, val) {
+      document.getElementById(`zpl-settings-${id}`).style.display = val === 'ESC/POS' ? 'none' : '';
+      document.getElementById(`escpos-settings-${id}`).style.display = val === 'ESC/POS' ? '' : 'none';
+    }
+
     function onPresetChange(id, val) {
       const isCustom = val === 'custom';
       document.getElementById(`set-w-${id}`).disabled = !isCustom;
@@ -491,7 +542,10 @@
     }
 
     async function saveSettings(id) {
+      const lang = document.getElementById(`set-lang-${id}`).value;
       const settings = {
+        language: lang,
+        // ZPL settings
         labelPreset: document.getElementById(`sel-preset-${id}`).value,
         widthDots: parseInt(document.getElementById(`set-w-${id}`).value),
         heightDots: parseInt(document.getElementById(`set-h-${id}`).value),
@@ -501,6 +555,11 @@
         mediaType: document.getElementById(`set-media-${id}`).value,
         printMode: document.getElementById(`set-mode-${id}`).value,
         orientation: document.getElementById(`set-orient-${id}`).value,
+        // ESC/POS settings
+        paperWidth: document.getElementById(`set-pw-${id}`).value,
+        autoCut: document.getElementById(`set-autocut-${id}`).value === 'true',
+        cutType: document.getElementById(`set-cuttype-${id}`).value,
+        feedLines: parseInt(document.getElementById(`set-feed-${id}`).value) || 4,
       };
       try {
         const res = await fetch(`${API}/printers/${encodeURIComponent(id)}/settings`, {
@@ -587,6 +646,33 @@
 
 ^XZ`;
       log('Sample ZPL loaded', 'success');
+    }
+
+    function loadSampleReceipt() {
+      document.getElementById('zpl-input').value =
+`================================
+        EDPrintTool Demo
+      Receipt Printer Test
+================================
+Date: 2026-03-13  Time: 14:30
+Cashier: Admin
+--------------------------------
+Item              Qty     Price
+--------------------------------
+Widget A            2     $9.99
+Widget B            1    $14.99
+Service Fee         1     $2.50
+--------------------------------
+Subtotal:                $37.47
+Tax (8%):                 $3.00
+================================
+TOTAL:                   $40.47
+================================
+
+   Thank you for your visit!
+      www.edprinttool.com
+`;
+      log('Sample receipt loaded (set printer to ESC/POS mode)', 'success');
     }
 
     // ─── Init ────────────────────────────────────

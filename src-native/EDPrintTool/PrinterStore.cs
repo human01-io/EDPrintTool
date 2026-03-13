@@ -89,6 +89,7 @@ public class PrinterStore
 
             var s = printer.Settings;
 
+            if (partial.TryGetPropertyValue("language", out var lang)) s.Language = lang!.GetValue<string>();
             if (partial.TryGetPropertyValue("labelPreset", out var lp)) s.LabelPreset = lp!.GetValue<string>();
             if (partial.TryGetPropertyValue("widthDots", out var w)) s.WidthDots = w!.GetValue<int>();
             if (partial.TryGetPropertyValue("heightDots", out var h)) s.HeightDots = h!.GetValue<int>();
@@ -98,6 +99,11 @@ public class PrinterStore
             if (partial.TryGetPropertyValue("orientation", out var o)) s.Orientation = o!.GetValue<string>();
             if (partial.TryGetPropertyValue("mediaType", out var mt)) s.MediaType = mt!.GetValue<string>();
             if (partial.TryGetPropertyValue("printMode", out var pm)) s.PrintMode = pm!.GetValue<string>();
+            // ESC/POS settings
+            if (partial.TryGetPropertyValue("paperWidth", out var pw)) s.PaperWidth = pw!.GetValue<string>();
+            if (partial.TryGetPropertyValue("autoCut", out var ac)) s.AutoCut = ac!.GetValue<bool>();
+            if (partial.TryGetPropertyValue("cutType", out var ct)) s.CutType = ct!.GetValue<string>();
+            if (partial.TryGetPropertyValue("feedLines", out var fl)) s.FeedLines = fl!.GetValue<int>();
 
             s.ApplyPreset();
             SaveConfig();
