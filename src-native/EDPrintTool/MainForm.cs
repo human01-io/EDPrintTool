@@ -33,6 +33,20 @@ public class MainForm : Form
     private readonly TextBox _qpZpl;
     private readonly ListBox _logBox;
 
+    // Settings panel controls
+    private readonly GroupBox _settingsGroup;
+    private readonly ComboBox _setPreset;
+    private readonly NumericUpDown _setWidth;
+    private readonly NumericUpDown _setHeight;
+    private readonly ComboBox _setDpi;
+    private readonly TrackBar _setDarkness;
+    private readonly Label _darknessValue;
+    private readonly NumericUpDown _setSpeed;
+    private readonly ComboBox _setMediaType;
+    private readonly ComboBox _setPrintMode;
+    private readonly ComboBox _setOrientation;
+    private string? _selectedPrinterId;
+
     public MainForm(PrinterStore store, HttpServer server)
     {
         _store = store;
@@ -107,7 +121,7 @@ public class MainForm : Form
         layout.Controls.Add(addGroup);
 
         // ─── Printer List ────────────────────────────
-        var listGroup = CreateGroupBox("CONFIGURED PRINTERS", 200);
+        var listGroup = CreateGroupBox("CONFIGURED PRINTERS", 210);
         _printerList = new ListView
         {
             Left = 10, Top = 25, Width = 900, Height = 130,
@@ -123,13 +137,81 @@ public class MainForm : Form
         _printerList.Columns.Add("Darkness", 70);
         _printerList.Columns.Add("Speed", 60);
 
-        var removeBtn = CreateButton("Remove Selected", 10, 160);
+        var settingsBtn = CreateButton("Settings", 10, 165);
+        settingsBtn.Width = 100;
+        settingsBtn.BackColor = BorderColor;
+        settingsBtn.Click += (_, _) => ToggleSettings();
+
+        var removeBtn = CreateButton("Remove Selected", 120, 165);
+        removeBtn.Width = 130;
         removeBtn.BackColor = Color.FromArgb(60, 30, 30);
         removeBtn.ForeColor = RedColor;
         removeBtn.Click += (_, _) => RemoveSelected();
+
         listGroup.Controls.Add(_printerList);
+        listGroup.Controls.Add(settingsBtn);
         listGroup.Controls.Add(removeBtn);
         layout.Controls.Add(listGroup);
+
+        // ─── Settings Panel ─────────────────────────
+        _settingsGroup = CreateGroupBox("PRINTER SETTINGS", 220);
+        _settingsGroup.Visible = false;
+
+        var normalFont = new Font("Segoe UI", 9, FontStyle.Regular);
+
+        // Row 1: Preset, Width, Height, DPI
+        var presetLbl = new Label { Text = "Label Preset:", Left = 10, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setPreset = new ComboBox { Left = 10, Top = 43, Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        foreach (var p in LabelPreset.GetAll())
+            _setPreset.Items.Add(new PresetItem(p.Id, $"{p.Desc} ({p.Id})"));
+        _setPreset.Items.Add(new PresetItem("custom", "Custom"));
+        _setPreset.SelectedIndexChanged += (_, _) => OnPresetChanged();
+
+        var widthLbl = new Label { Text = "Width (dots):", Left = 250, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setWidth = new NumericUpDown { Left = 250, Top = 43, Width = 100, Minimum = 50, Maximum = 5000, BackColor = BgColor, ForeColor = TextColor, Enabled = false };
+
+        var heightLbl = new Label { Text = "Height (dots):", Left = 370, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setHeight = new NumericUpDown { Left = 370, Top = 43, Width = 100, Minimum = 50, Maximum = 5000, BackColor = BgColor, ForeColor = TextColor, Enabled = false };
+
+        var dpiLbl = new Label { Text = "DPI:", Left = 490, Top = 25, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setDpi = new ComboBox { Left = 490, Top = 43, Width = 70, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setDpi.Items.AddRange(new object[] { "203", "300" });
+
+        // Row 2: Darkness, Speed, Media Type, Print Mode, Orientation
+        var darkLbl = new Label { Text = "Darkness (0-30):", Left = 10, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setDarkness = new TrackBar { Left = 10, Top = 96, Width = 200, Minimum = 0, Maximum = 30, TickFrequency = 5, BackColor = SurfaceColor };
+        _darknessValue = new Label { Text = "15", Left = 215, Top = 100, ForeColor = TextColor, AutoSize = true, Font = normalFont };
+        _setDarkness.ValueChanged += (_, _) => _darknessValue.Text = _setDarkness.Value.ToString();
+
+        var speedLbl = new Label { Text = "Speed (in/sec):", Left = 260, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setSpeed = new NumericUpDown { Left = 260, Top = 96, Width = 70, Minimum = 2, Maximum = 14, BackColor = BgColor, ForeColor = TextColor };
+
+        var mediaLbl = new Label { Text = "Media Type:", Left = 350, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setMediaType = new ComboBox { Left = 350, Top = 96, Width = 140, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setMediaType.Items.AddRange(new object[] { "Direct Thermal (D)", "Thermal Transfer (T)" });
+
+        var modeLbl = new Label { Text = "Print Mode:", Left = 510, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setPrintMode = new ComboBox { Left = 510, Top = 96, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setPrintMode.Items.AddRange(new object[] { "Tear-Off (T)", "Peel-Off (P)", "Cutter (C)" });
+
+        var orientLbl = new Label { Text = "Orientation:", Left = 650, Top = 78, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
+        _setOrientation = new ComboBox { Left = 650, Top = 96, Width = 150, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
+        _setOrientation.Items.AddRange(new object[] { "Normal (N)", "Rotated 90 (R)", "Inverted 180 (I)", "Bottom-Up 270 (B)" });
+
+        var saveSettingsBtn = CreateButton("Save Settings", 10, 140);
+        saveSettingsBtn.Width = 120;
+        saveSettingsBtn.Click += (_, _) => SaveSettings();
+
+        var settingsPrinterLabel = new Label { Text = "", Left = 140, Top = 148, ForeColor = AccentColor, AutoSize = true, Font = normalFont, Name = "settingsPrinterLabel" };
+
+        _settingsGroup.Controls.AddRange(new Control[]
+        {
+            presetLbl, _setPreset, widthLbl, _setWidth, heightLbl, _setHeight, dpiLbl, _setDpi,
+            darkLbl, _setDarkness, _darknessValue, speedLbl, _setSpeed,
+            mediaLbl, _setMediaType, modeLbl, _setPrintMode, orientLbl, _setOrientation,
+            saveSettingsBtn, settingsPrinterLabel,
+        });
+        layout.Controls.Add(_settingsGroup);
 
         // ─── Print ZPL ───────────────────────────────
         var printGroup = CreateGroupBox("PRINT ZPL", 260);
@@ -351,6 +433,126 @@ public class MainForm : Form
 
 ^XZ";
         LogMessage("Sample ZPL loaded", false);
+    }
+
+    // ─── Settings Panel ─────────────────────────────────────────
+
+    private void ToggleSettings()
+    {
+        if (_printerList.SelectedItems.Count == 0)
+        {
+            LogMessage("Select a printer first to edit settings", true);
+            return;
+        }
+
+        var id = _printerList.SelectedItems[0].Tag as string;
+        if (id == null) return;
+
+        // If already showing this printer's settings, hide
+        if (_settingsGroup.Visible && _selectedPrinterId == id)
+        {
+            _settingsGroup.Visible = false;
+            _selectedPrinterId = null;
+            return;
+        }
+
+        _selectedPrinterId = id;
+        var printer = _store.GetPrinter(id);
+        if (printer == null) return;
+
+        LoadSettingsIntoPanel(printer);
+        _settingsGroup.Visible = true;
+    }
+
+    private void LoadSettingsIntoPanel(PrinterInfo printer)
+    {
+        var s = printer.Settings;
+
+        // Label preset
+        for (int i = 0; i < _setPreset.Items.Count; i++)
+        {
+            if (_setPreset.Items[i] is PresetItem pi && pi.Id == s.LabelPreset)
+            { _setPreset.SelectedIndex = i; break; }
+        }
+
+        _setWidth.Value = Math.Clamp(s.WidthDots, 50, 5000);
+        _setHeight.Value = Math.Clamp(s.HeightDots, 50, 5000);
+        _setDpi.SelectedItem = s.Dpi.ToString();
+        _setDarkness.Value = Math.Clamp(s.Darkness, 0, 30);
+        _darknessValue.Text = s.Darkness.ToString();
+        _setSpeed.Value = Math.Clamp(s.Speed, 2, 14);
+
+        // Media type: D or T
+        _setMediaType.SelectedIndex = s.MediaType == "D" ? 0 : 1;
+
+        // Print mode: T, P, C
+        _setPrintMode.SelectedIndex = s.PrintMode switch { "P" => 1, "C" => 2, _ => 0 };
+
+        // Orientation: N, R, I, B
+        _setOrientation.SelectedIndex = s.Orientation switch { "R" => 1, "I" => 2, "B" => 3, _ => 0 };
+
+        // Show which printer is being configured
+        var label = _settingsGroup.Controls.Find("settingsPrinterLabel", false).FirstOrDefault();
+        if (label != null) label.Text = $"Editing: {printer.Name}";
+    }
+
+    private void OnPresetChanged()
+    {
+        if (_setPreset.SelectedItem is PresetItem pi)
+        {
+            bool isCustom = pi.Id == "custom";
+            _setWidth.Enabled = isCustom;
+            _setHeight.Enabled = isCustom;
+
+            if (!isCustom)
+            {
+                var preset = Models.LabelPreset.Get(pi.Id);
+                if (preset != null)
+                {
+                    _setWidth.Value = preset.WidthDots;
+                    _setHeight.Value = preset.HeightDots;
+                }
+            }
+        }
+    }
+
+    private void SaveSettings()
+    {
+        if (_selectedPrinterId == null) return;
+
+        var presetId = (_setPreset.SelectedItem as PresetItem)?.Id ?? "4x6";
+        var mediaCode = _setMediaType.SelectedIndex == 0 ? "D" : "T";
+        var modeCode = _setPrintMode.SelectedIndex switch { 1 => "P", 2 => "C", _ => "T" };
+        var orientCode = _setOrientation.SelectedIndex switch { 1 => "R", 2 => "I", 3 => "B", _ => "N" };
+
+        var partial = new System.Text.Json.Nodes.JsonObject
+        {
+            ["labelPreset"] = presetId,
+            ["widthDots"] = (int)_setWidth.Value,
+            ["heightDots"] = (int)_setHeight.Value,
+            ["dpi"] = int.Parse(_setDpi.SelectedItem?.ToString() ?? "203"),
+            ["darkness"] = _setDarkness.Value,
+            ["speed"] = (int)_setSpeed.Value,
+            ["mediaType"] = mediaCode,
+            ["printMode"] = modeCode,
+            ["orientation"] = orientCode,
+        };
+
+        var updated = _store.UpdateSettings(_selectedPrinterId, partial);
+        if (updated != null)
+        {
+            RefreshPrinterList();
+            LogMessage($"Settings saved for {_selectedPrinterId}", false);
+        }
+        else
+        {
+            LogMessage($"Printer not found: {_selectedPrinterId}", true);
+        }
+    }
+
+    private record PresetItem(string Id, string Label)
+    {
+        public override string ToString() => Label;
     }
 
     // ─── UI Helpers ─────────────────────────────────────────────
