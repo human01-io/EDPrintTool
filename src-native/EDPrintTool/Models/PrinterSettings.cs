@@ -81,13 +81,10 @@ public class PrinterSettings
     /// </summary>
     public byte[] BuildEscPosInit()
     {
-        var bytes = new List<byte>();
-        // ESC @ — Initialize printer
-        bytes.AddRange(new byte[] { 0x1B, 0x40 });
-        // GS W nL nH — Set print area width
-        int widthDots = PaperWidth == "58mm" ? 384 : 576;
-        bytes.AddRange(new byte[] { 0x1D, 0x57, (byte)(widthDots & 0xFF), (byte)((widthDots >> 8) & 0xFF) });
-        return bytes.ToArray();
+        // ESC @ — Initialize printer (reset to defaults)
+        // Note: we do NOT send GS W (set print area width) because most receipt
+        // printers auto-detect paper width and GS W can confuse some models.
+        return new byte[] { 0x1B, 0x40 };
     }
 
     /// <summary>
@@ -101,9 +98,9 @@ public class PrinterSettings
         if (AutoCut)
         {
             if (CutType == "full")
-                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x42, feed }); // GS V 66 n = full cut, feed n
+                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x41, feed }); // GS V m=65 n — Function B: full cut, feed n
             else
-                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x41, feed }); // GS V 65 n = partial cut, feed n
+                bytes.AddRange(new byte[] { 0x1D, 0x56, 0x42, feed }); // GS V m=66 n — Function B: partial cut, feed n
         }
         else if (FeedLines > 0)
         {

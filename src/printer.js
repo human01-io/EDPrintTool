@@ -35,7 +35,11 @@ function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-      for (const p of data) printers.set(p.id, p);
+      for (const p of data) {
+        // Merge defaults so legacy configs get new ESC/POS fields
+        p.settings = { ...DEFAULT_SETTINGS, ...(p.settings || {}) };
+        printers.set(p.id, p);
+      }
       console.log(`[Printers] Loaded ${printers.size} printer(s) from config`);
     }
   } catch (err) {
@@ -95,20 +99,11 @@ const DEFAULT_SETTINGS = {
 
 // ─── ESC/POS helpers ──────────────────────────────────────────
 
-// Print area widths in dots (at 203 dpi)
-const ESCPOS_WIDTHS = {
-  '80mm': 576,
-  '58mm': 384,
-};
-
-function buildEscPosInit(settings) {
-  const bytes = [
-    0x1B, 0x40,  // ESC @ — Initialize printer
-  ];
-  // GS W nL nH — Set print area width
-  const widthDots = ESCPOS_WIDTHS[settings.paperWidth] || 576;
-  bytes.push(0x1D, 0x57, widthDots & 0xFF, (widthDots >> 8) & 0xFF);
-  return Buffer.from(bytes);
+function buildEscPosInit() {
+  // ESC @ — Initialize printer (reset to defaults)
+  // Note: we do NOT send GS W (set print area width) because most receipt
+  // printers auto-detect paper width and GS W can confuse some models.
+  return Buffer.from([0x1B, 0x40]);
 }
 
 function buildEscPosCut(settings) {
@@ -117,9 +112,9 @@ function buildEscPosCut(settings) {
   if (settings.autoCut) {
     const feed = Math.min(settings.feedLines || 0, 255);
     if (settings.cutType === 'full') {
-      bytes.push(0x1D, 0x56, 0x42, feed); // GS V 66 n = full cut, feed n
+      bytes.push(0x1D, 0x56, 0x41, feed); // GS V m=65 n — Function B: full cut, feed n
     } else {
-      bytes.push(0x1D, 0x56, 0x41, feed); // GS V 65 n = partial cut, feed n
+      bytes.push(0x1D, 0x56, 0x42, feed); // GS V m=66 n — Function B: partial cut, feed n
     }
   } else if (settings.feedLines > 0) {
     // No cut, just feed
@@ -481,7 +476,7 @@ async function print(printerId, content, options = {}) {
     // ESC/POS: build binary payload with init + content + feed + cut
     const parts = [];
     for (let i = 0; i < copies; i++) {
-      if (applySettings) parts.push(buildEscPosInit(p.settings));
+      if (applySettings) parts.push(buildEscPosInit());
       parts.push(Buffer.from(content, 'utf8'));
       if (applySettings) parts.push(buildEscPosCut(p.settings));
     }

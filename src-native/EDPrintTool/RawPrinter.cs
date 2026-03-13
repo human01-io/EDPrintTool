@@ -129,7 +129,7 @@ public static class RawPrinter
 
     // ─── Print to CUPS printer (macOS/Linux) ────────────────────
 
-    public static async Task<string> PrintCupsAsync(string queue, string zpl)
+    public static async Task<string> PrintCupsRawAsync(string queue, byte[] data)
     {
         var psi = new System.Diagnostics.ProcessStartInfo("lp", $"-d {queue} -o raw")
         {
@@ -143,7 +143,8 @@ public static class RawPrinter
         var proc = System.Diagnostics.Process.Start(psi)
             ?? throw new Exception("Failed to start lp");
 
-        await proc.StandardInput.WriteAsync(zpl);
+        // Write raw bytes directly to avoid text encoding corruption
+        await proc.StandardInput.BaseStream.WriteAsync(data);
         proc.StandardInput.Close();
         await proc.WaitForExitAsync();
 
@@ -153,8 +154,11 @@ public static class RawPrinter
             throw new Exception($"lp failed: {err}");
         }
 
-        return $"Sent to CUPS queue: {queue}";
+        return $"Sent {data.Length} bytes to CUPS queue: {queue}";
     }
+
+    public static Task<string> PrintCupsAsync(string queue, string text)
+        => PrintCupsRawAsync(queue, Encoding.UTF8.GetBytes(text));
 
     // ─── Main dispatcher ────────────────────────────────────────
 
@@ -193,9 +197,9 @@ public static class RawPrinter
                 printer.WindowsPrinter ?? throw new Exception($"No Windows printer name for: {printer.Id}"),
                 rawData),
 
-            "usb" => await PrintCupsAsync(
+            "usb" => await PrintCupsRawAsync(
                 printer.CupsQueue ?? throw new Exception($"No CUPS queue for: {printer.Id}"),
-                Encoding.UTF8.GetString(rawData)),
+                rawData),
 
             _ => throw new Exception($"Unknown printer type: {printer.Type}")
         };

@@ -172,7 +172,7 @@ public class HttpServer
         // PATCH /api/printers/{id}/settings
         if (method == "PATCH" && path.StartsWith("/api/printers/") && path.EndsWith("/settings"))
         {
-            var id = ExtractSegment(path, 3); // /api/printers/{id}/settings
+            var id = ExtractSegment(path, 2); // /api/printers/{id}/settings
             var body = await ReadBody(req);
             var partial = JsonNode.Parse(body)?.AsObject();
             if (partial == null) { await WriteJson(res, 400, new { error = "Invalid body" }); return; }
@@ -186,7 +186,7 @@ public class HttpServer
         // DELETE /api/printers/{id}
         if (method == "DELETE" && path.StartsWith("/api/printers/") && !path.Contains("/settings"))
         {
-            var id = ExtractSegment(path, 3);
+            var id = ExtractSegment(path, 2);
             var removed = _store.RemovePrinter(id);
             OnActivity?.Invoke($"Printer removed: {id}", false);
             await WriteJson(res, 200, new { removed });
@@ -196,7 +196,7 @@ public class HttpServer
         // POST /api/print/{printerId}
         if (method == "POST" && path.StartsWith("/api/print/") && path != "/api/print-raw")
         {
-            var printerId = ExtractSegment(path, 3);
+            var printerId = ExtractSegment(path, 2);
             var body = await ReadBody(req);
 
             string zpl;
@@ -333,8 +333,8 @@ public class HttpServer
                     return JsonOk(requestId, discovered);
 
                 case "addPrinter":
-                    var printerData = msg["data"];
-                    if (printerData == null) return JsonErr(requestId, "Missing data");
+                    var printerData = msg["printer"];
+                    if (printerData == null) return JsonErr(requestId, "Missing printer");
                     var printer = JsonSerializer.Deserialize<PrinterInfo>(printerData.ToJsonString(), JsonOpts);
                     if (printer == null) return JsonErr(requestId, "Invalid printer data");
                     var added = _store.AddPrinter(printer);
@@ -343,8 +343,8 @@ public class HttpServer
                 case "updateSettings":
                 {
                     var id = msg["printerId"]?.GetValue<string>();
-                    var settings = msg["data"]?.AsObject();
-                    if (id == null || settings == null) return JsonErr(requestId, "Missing printerId or data");
+                    var settings = msg["settings"]?.AsObject();
+                    if (id == null || settings == null) return JsonErr(requestId, "Missing printerId or settings");
                     var updated = _store.UpdateSettings(id, settings);
                     return updated != null ? JsonOk(requestId, updated) : JsonErr(requestId, $"Printer not found: {id}");
                 }
