@@ -205,13 +205,18 @@ public class EscPosEncoder
     }
 
     /// <summary>
-    /// GS V Function B — Cut paper with feed.
-    /// full: m=0x41, partial: m=0x42 (per Epson spec).
+    /// Cut paper — feeds first, then sends GS V Function A.
+    /// Uses separate ESC d (feed) + GS V (cut) for maximum compatibility.
+    /// Function A works on virtually all ESC/POS printers.
     /// </summary>
     public EscPosEncoder Cut(string type = "partial", int feedLines = 4)
     {
-        byte m = type == "full" ? (byte)0x41 : (byte)0x42;
-        Write(0x1D, 0x56, m, (byte)Math.Clamp(feedLines, 0, 255));
+        // Feed lines first (ESC d n)
+        if (feedLines > 0)
+            Write(0x1B, 0x64, (byte)Math.Clamp(feedLines, 0, 255));
+        // GS V Function A — simple, widely supported
+        byte m = type == "full" ? (byte)0x00 : (byte)0x01;
+        Write(0x1D, 0x56, m);
         return this;
     }
 

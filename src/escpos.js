@@ -220,13 +220,21 @@ class EscPosEncoder {
   }
 
   /**
-   * GS V Function B — Cut paper with feed.
+   * Cut paper — feeds first, then sends GS V Function A.
+   * Uses separate ESC d (feed) + GS V (cut) for maximum compatibility.
+   * Function A (no feed param) works on virtually all ESC/POS printers
+   * including Star TSP in emulation mode and budget Chinese printers.
    * @param {'full'|'partial'} [type='partial']
    * @param {number} [feedLines=4] - lines to feed before cutting
    */
   cut(type = 'partial', feedLines = 4) {
-    const m = type === 'full' ? 0x41 : 0x42;
-    this._parts.push(Buffer.from([0x1D, 0x56, m, Math.min(feedLines, 255)]));
+    // Feed lines first (ESC d n)
+    if (feedLines > 0) {
+      this._parts.push(Buffer.from([0x1B, 0x64, Math.min(feedLines, 255)]));
+    }
+    // GS V Function A — simple, widely supported
+    const m = type === 'full' ? 0x00 : 0x01;
+    this._parts.push(Buffer.from([0x1D, 0x56, m]));
     return this;
   }
 
