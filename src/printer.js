@@ -279,7 +279,7 @@ function printWindows(printerName, zpl) {
     const ts = Date.now();
     const tmpZpl = path.join(os.tmpdir(), 'edprint_' + ts + '.zpl');
     const tmpPs1 = path.join(os.tmpdir(), 'edprint_' + ts + '.ps1');
-    fs.writeFileSync(tmpZpl, zpl, 'utf8');
+    fs.writeFileSync(tmpZpl, zpl);
 
     // PowerShell script that compiles C# inline to P/Invoke winspool.drv
     const ps1 = `param([string]$PrinterName, [string]$FilePath)
@@ -473,7 +473,7 @@ async function print(printerId, content, options = {}) {
       parts.push(Buffer.from(content, 'utf8'));
       if (applySettings) parts.push(buildEscPosCut(p.settings));
     }
-    payload = Buffer.concat(parts).toString('binary');
+    payload = Buffer.concat(parts);
   } else {
     // ZPL: text-based payload
     payload = '';

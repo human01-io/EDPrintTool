@@ -21,7 +21,7 @@ node --version
 echo.
 
 :: Install dependencies
-echo [1/3] Installing dependencies...
+echo [1/2] Installing dependencies...
 call npm install
 if %errorlevel% neq 0 (
     echo [ERROR] npm install failed!
@@ -29,33 +29,15 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: Install node-printer for Windows USB support
-echo [2/3] Installing Windows printer driver (node-printer)...
-call npm install @thiagoelg/node-printer
-if %errorlevel% neq 0 (
-    echo.
-    echo [WARNING] node-printer failed to install.
-    echo You may need to install Windows Build Tools first:
-    echo   npm install --global windows-build-tools
-    echo Or install Visual Studio Build Tools from:
-    echo   https://visualstudio.microsoft.com/visual-cpp-build-tools/
-    echo.
-    echo Network printing will still work. USB printing requires node-printer.
-    echo.
-)
-
-echo [3/3] Setup complete!
+echo [2/2] Setup complete!
 echo.
 echo ================================================
 echo.
-echo   To start the desktop app:
-echo     npm start        (opens Electron window + tray icon)
+echo   To start the server:
+echo     npm start          (localhost:8189 in browser)
 echo.
-echo   To start server-only mode:
-echo     npm run server   (localhost:8189 in browser)
-echo.
-echo   To build a Windows installer (.exe):
-echo     npm run build:win
+echo   To start in dev mode (auto-reload):
+echo     npm run dev
 echo.
 echo ================================================
 echo.

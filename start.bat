@@ -1,3 +1,0 @@
-@echo off
-echo Starting EDPrintTool desktop app...
-npx electron .

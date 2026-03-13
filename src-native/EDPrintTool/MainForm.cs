@@ -290,7 +290,7 @@ public class MainForm : Form
             BackColor = BgColor, ForeColor = TextColor,
         };
 
-        var printBtn = CreateButton("Print Label", 10, 220);
+        var printBtn = CreateButton("Print", 10, 220);
         printBtn.Click += async (_, _) => await PrintLabel();
 
         var sampleBtn = CreateButton("Sample ZPL", 140, 220);
