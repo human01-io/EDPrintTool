@@ -104,6 +104,31 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const segments = url.pathname.split('/').filter(Boolean); // ['api', ...]
 
+    // GET /docs — Swagger UI
+    if (req.method === 'GET' && url.pathname === '/docs') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`<!DOCTYPE html>
+<html><head>
+  <title>EDPrintTool Relay API</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head><body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>SwaggerUIBundle({ url: '/openapi.json', dom_id: '#swagger-ui' });</script>
+</body></html>`);
+      return;
+    }
+
+    // GET /openapi.json
+    if (req.method === 'GET' && url.pathname === '/openapi.json') {
+      const spec = JSON.parse(fs.readFileSync(path.join(__dirname, 'openapi.json'), 'utf8'));
+      // Set server URL to the actual host
+      const proto = req.headers['x-forwarded-proto'] || 'http';
+      const host = req.headers['x-forwarded-host'] || req.headers.host;
+      spec.servers = [{ url: `${proto}://${host}`, description: 'This relay server' }];
+      return json(res, 200, spec);
+    }
+
     // GET /api/status
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {

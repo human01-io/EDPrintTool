@@ -1,0 +1,468 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "EDPrintTool Relay API",
+    "description": "Cloud relay server that routes print jobs from web applications to remote EDPrintTool instances connected via WebSocket. Self-hostable, open source.",
+    "version": "1.0.0",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://your-relay.example.com",
+      "description": "Your deployed relay server"
+    }
+  ],
+  "tags": [
+    { "name": "Status", "description": "Relay health check" },
+    { "name": "Admin", "description": "Location management (requires X-Admin-Key header)" },
+    { "name": "Printing", "description": "Print jobs routed to connected EDPrintTool instances (requires X-API-Key header)" }
+  ],
+  "paths": {
+    "/api/status": {
+      "get": {
+        "tags": ["Status"],
+        "summary": "Relay status",
+        "description": "Returns relay status, number of registered locations, and number of connected EDPrintTool instances.",
+        "operationId": "getStatus",
+        "responses": {
+          "200": {
+            "description": "Relay is running",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RelayStatus" },
+                "example": {
+                  "status": "running",
+                  "type": "relay",
+                  "locations": 3,
+                  "connected": 2
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/locations": {
+      "get": {
+        "tags": ["Admin"],
+        "summary": "List all locations",
+        "description": "Returns all registered locations with their online/offline status.",
+        "operationId": "listLocations",
+        "parameters": [
+          { "$ref": "#/components/parameters/AdminKey" }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of locations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/LocationInfo" }
+                },
+                "example": [
+                  { "locationId": "store-a", "name": "Store A", "online": true, "createdAt": "2026-03-14T20:00:00.000Z" },
+                  { "locationId": "store-b", "name": "Store B", "online": false, "createdAt": "2026-03-14T21:00:00.000Z" }
+                ]
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing admin key",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Admin"],
+        "summary": "Register a location",
+        "description": "Register a new EDPrintTool location. Returns the location ID and a generated API key that the EDPrintTool instance and web app will use for authentication.",
+        "operationId": "createLocation",
+        "parameters": [
+          { "$ref": "#/components/parameters/AdminKey" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateLocationRequest" },
+              "example": { "name": "Store A", "locationId": "store-a" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Location created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LocationCreated" },
+                "example": { "locationId": "store-a", "apiKey": "a1b2c3d4e5f6...", "name": "Store A" }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing admin key",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "409": {
+            "description": "Location already exists",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/locations/{locationId}": {
+      "delete": {
+        "tags": ["Admin"],
+        "summary": "Remove a location",
+        "description": "Remove a registered location. If the location is currently connected, the connection is closed.",
+        "operationId": "deleteLocation",
+        "parameters": [
+          { "$ref": "#/components/parameters/AdminKey" },
+          { "$ref": "#/components/parameters/LocationId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removal result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "removed": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing admin key",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/api/locations/{locationId}/status": {
+      "get": {
+        "tags": ["Printing"],
+        "summary": "EDPrintTool status at location",
+        "description": "Returns the status of the EDPrintTool instance at this location (version, printer count).",
+        "operationId": "getLocationStatus",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKey" },
+          { "$ref": "#/components/parameters/LocationId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "EDPrintTool status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/EdprintStatus" },
+                "example": { "status": "running", "version": "2.0.2", "printers": 3 }
+              }
+            }
+          },
+          "401": { "description": "Invalid API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Location not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "EDPrintTool not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/locations/{locationId}/printers": {
+      "get": {
+        "tags": ["Printing"],
+        "summary": "List printers at location",
+        "description": "Returns all configured printers on the EDPrintTool instance at this location.",
+        "operationId": "listLocationPrinters",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKey" },
+          { "$ref": "#/components/parameters/LocationId" }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of printers",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Printer" } }
+              }
+            }
+          },
+          "401": { "description": "Invalid API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Location not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "EDPrintTool not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/locations/{locationId}/print/{printerId}": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Print ZPL",
+        "description": "Send ZPL to a printer at this location. The relay forwards the job to the connected EDPrintTool instance and returns the result.",
+        "operationId": "printZpl",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKey" },
+          { "$ref": "#/components/parameters/LocationId" },
+          { "$ref": "#/components/parameters/PrinterId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PrintZplRequest" },
+              "example": { "zpl": "^XA^FO50,50^ADN,36,20^FDHello^FS^XZ", "copies": 1, "applySettings": true }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Print result from EDPrintTool", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrintResult" } } } },
+          "401": { "description": "Invalid API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Location not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Print failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "EDPrintTool not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "504": { "description": "Print job timed out", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/locations/{locationId}/print-escpos/{printerId}": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Print ESC/POS commands",
+        "description": "Send structured ESC/POS commands to a receipt printer at this location. Each command is `[method, ...args]`.",
+        "operationId": "printEscPos",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKey" },
+          { "$ref": "#/components/parameters/LocationId" },
+          { "$ref": "#/components/parameters/PrinterId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PrintEscPosRequest" },
+              "example": {
+                "commands": [
+                  ["initialize"],
+                  ["align", "center"],
+                  ["bold", true],
+                  ["line", "RELAY PRINT TEST"],
+                  ["bold", false],
+                  ["line", "Printed from the cloud!"],
+                  ["qrcode", "https://example.com", { "size": 6 }],
+                  ["cut"]
+                ],
+                "copies": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Print result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrintResult" } } } },
+          "401": { "description": "Invalid API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Location not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Print failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "EDPrintTool not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "504": { "description": "Timed out", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/locations/{locationId}/print-document/{printerId}": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Print PDF document",
+        "description": "Print a PDF file through the OS spooler at this location. Only works with USB/spooler printers.",
+        "operationId": "printDocument",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKey" },
+          { "$ref": "#/components/parameters/LocationId" },
+          { "$ref": "#/components/parameters/PrinterId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PrintDocumentRequest" },
+              "example": { "file": "JVBERi0xLjQK... (base64-encoded PDF)", "copies": 1 }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Print result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrintResult" } } } },
+          "401": { "description": "Invalid API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Location not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Print failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "EDPrintTool not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "504": { "description": "Timed out", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/locations/{locationId}/print-raw": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Quick print to IP:port",
+        "description": "Send raw data to a network printer by IP address at this location, without a saved printer config.",
+        "operationId": "printRaw",
+        "parameters": [
+          { "$ref": "#/components/parameters/ApiKey" },
+          { "$ref": "#/components/parameters/LocationId" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PrintRawRequest" },
+              "example": { "host": "192.168.1.100", "port": 9100, "zpl": "^XA^FO50,50^ADN,36,20^FDTest^FS^XZ" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Print result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PrintResult" } } } },
+          "401": { "description": "Invalid API key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Location not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "description": "Print failed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "EDPrintTool not connected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "504": { "description": "Timed out", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "AdminKey": {
+        "name": "X-Admin-Key",
+        "in": "header",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Admin API key (set via RELAY_ADMIN_KEY env var)"
+      },
+      "ApiKey": {
+        "name": "X-API-Key",
+        "in": "header",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Per-location API key (returned when registering a location)"
+      },
+      "LocationId": {
+        "name": "locationId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Location identifier"
+      },
+      "PrinterId": {
+        "name": "printerId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "Printer ID on the remote EDPrintTool instance"
+      }
+    },
+    "schemas": {
+      "RelayStatus": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "running" },
+          "type": { "type": "string", "example": "relay" },
+          "locations": { "type": "integer", "description": "Number of registered locations" },
+          "connected": { "type": "integer", "description": "Number of currently connected EDPrintTool instances" }
+        }
+      },
+      "LocationInfo": {
+        "type": "object",
+        "properties": {
+          "locationId": { "type": "string", "example": "store-a" },
+          "name": { "type": "string", "example": "Store A" },
+          "online": { "type": "boolean", "description": "Whether EDPrintTool is currently connected" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateLocationRequest": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Display name for the location" },
+          "locationId": { "type": "string", "description": "Unique identifier (auto-generated from name if omitted)" }
+        }
+      },
+      "LocationCreated": {
+        "type": "object",
+        "properties": {
+          "locationId": { "type": "string", "example": "store-a" },
+          "apiKey": { "type": "string", "description": "Generated API key for this location", "example": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4" },
+          "name": { "type": "string", "example": "Store A" }
+        }
+      },
+      "EdprintStatus": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "running" },
+          "version": { "type": "string", "example": "2.0.2" },
+          "printers": { "type": "integer", "example": 3 }
+        }
+      },
+      "Printer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "zebra-zd420" },
+          "name": { "type": "string", "example": "Zebra ZD420" },
+          "type": { "type": "string", "enum": ["network", "usb"] },
+          "host": { "type": "string", "nullable": true },
+          "port": { "type": "integer" },
+          "windowsPrinter": { "type": "string", "nullable": true },
+          "cupsQueue": { "type": "string", "nullable": true },
+          "settings": { "type": "object", "description": "Printer settings (language, label size, darkness, etc.)" }
+        }
+      },
+      "PrintZplRequest": {
+        "type": "object",
+        "required": ["zpl"],
+        "properties": {
+          "zpl": { "type": "string", "description": "Raw ZPL code" },
+          "copies": { "type": "integer", "minimum": 1, "default": 1 },
+          "applySettings": { "type": "boolean", "default": true, "description": "Prepend printer setup commands" }
+        }
+      },
+      "PrintEscPosRequest": {
+        "type": "object",
+        "required": ["commands"],
+        "properties": {
+          "commands": {
+            "type": "array",
+            "description": "Array of ESC/POS commands as [method, ...args]. See EDPrintTool docs for available commands.",
+            "items": { "type": "array", "items": {} }
+          },
+          "copies": { "type": "integer", "minimum": 1, "default": 1 }
+        }
+      },
+      "PrintDocumentRequest": {
+        "type": "object",
+        "required": ["file"],
+        "properties": {
+          "file": { "type": "string", "description": "Base64-encoded PDF file" },
+          "copies": { "type": "integer", "minimum": 1, "default": 1 }
+        }
+      },
+      "PrintRawRequest": {
+        "type": "object",
+        "required": ["host", "zpl"],
+        "properties": {
+          "host": { "type": "string", "description": "Printer IP address or hostname" },
+          "port": { "type": "integer", "default": 9100 },
+          "zpl": { "type": "string", "description": "Raw data to send" }
+        }
+      },
+      "PrintResult": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "method": { "type": "string", "description": "Print method used (network, cups, windows-raw, etc.)" },
+          "message": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "EDPrintTool at \"store-a\" is not connected" }
+        }
+      }
+    }
+  }
+}
