@@ -7,6 +7,7 @@ const printer = require('./printer');
 const { EscPosEncoder } = require('./escpos');
 
 const swaggerUiPath = require('swagger-ui-dist').absolutePath();
+const { version: VERSION } = require('../package.json');
 
 const PORT = process.env.PORT || 8189;
 const app = express();
@@ -29,13 +30,24 @@ app.get('/docs', (req, res) => {
 });
 app.use('/swagger-ui', express.static(swaggerUiPath));
 
+// Serve openapi.json with version injected from package.json
+app.get('/openapi.json', (req, res) => {
+  const fs = require('fs');
+  const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'openapi.json'), 'utf8'));
+  spec.info.version = VERSION;
+  if (spec.components?.schemas?.Status?.properties?.version) {
+    spec.components.schemas.Status.properties.version.example = VERSION;
+  }
+  res.json(spec);
+});
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ─── REST API ────────────────────────────────────────────────
 
 // Health check
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'running', version: '1.3.0', printers: printer.getPrinters().length });
+  res.json({ status: 'running', version: VERSION, printers: printer.getPrinters().length });
 });
 
 // Label presets
@@ -237,7 +249,7 @@ wss.on('connection', (ws) => {
 
       switch (action) {
         case 'status':
-          result = { status: 'running', version: '1.3.0', printers: printer.getPrinters().length };
+          result = { status: 'running', version: VERSION, printers: printer.getPrinters().length };
           break;
 
         case 'listPrinters':
@@ -314,7 +326,7 @@ if (require.main === module) {
   start().then(() => {
     console.log(`
   ╔══════════════════════════════════════════╗
-  ║          EDPrintTool v1.3.0              ║
+  ║          EDPrintTool v${VERSION.padEnd(22)}║
   ╠══════════════════════════════════════════╣
   ║  Dashboard:  http://localhost:${PORT}       ║
   ║  REST API:   http://localhost:${PORT}/api   ║

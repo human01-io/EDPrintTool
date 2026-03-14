@@ -64,6 +64,17 @@ Lightweight capability declarations (`generic`, `epson`, `star`, `bixolon`, `cit
 - macOS: `~/Library/Application Support/EDPrintTool/printers.json`
 - Linux: `~/.edprinttool/printers.json`
 
+## Versioning
+
+Version is managed in only **two files** — everything else derives automatically:
+
+| File | Scope |
+|------|-------|
+| `package.json` | Node.js server — `server.js` reads `version` at runtime, `/openapi.json` endpoint injects it |
+| `src-native/EDPrintTool/EDPrintTool.csproj` `<Version>` | C# native app — `UpdateChecker.cs` and `HttpServer.cs` read from assembly metadata |
+
+Do **not** hardcode version strings in `server.js`, `HttpServer.cs`, `UpdateChecker.cs`, or `openapi.json`.
+
 ## Key Design Decisions
 
 - **Dual cut commands**: Both Epson-specific (`ESC i`/`ESC m`) and standard (`GS V`) cut commands are sent for maximum printer compatibility
