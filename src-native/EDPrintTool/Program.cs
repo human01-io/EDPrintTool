@@ -53,6 +53,13 @@ static class Program
             return;
         }
 
+        // Start relay client if configured (runs alongside local server)
+        var relay = RelayClient.TryStart(store);
+        if (relay != null)
+        {
+            relay.OnActivity += (msg, isError) => Console.WriteLine(msg);
+        }
+
         var mainForm = new MainForm(store, server);
         using var tray = new TrayIcon(mainForm);
 
@@ -65,6 +72,7 @@ static class Program
 
         Application.Run(mainForm);
 
+        relay?.Stop();
         server.Stop();
         _mutex.ReleaseMutex();
     }
