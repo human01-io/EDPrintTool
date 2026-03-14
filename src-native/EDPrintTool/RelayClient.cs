@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using EDPrintTool.Models;
 
 namespace EDPrintTool;
 
