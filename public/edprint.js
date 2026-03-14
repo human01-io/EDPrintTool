@@ -148,6 +148,22 @@ class EDPrint {
     return this._send({ action: 'printRaw', host, port, zpl });
   }
 
+  /**
+   * Print a PDF document through the OS spooler (USB printers only).
+   * @param {string} printerId
+   * @param {string} fileBase64 - base64-encoded PDF file
+   * @param {object} [options]
+   * @param {number} [options.copies=1]
+   */
+  printDocument(printerId, fileBase64, options = {}) {
+    return this._send({
+      action: 'printDocument',
+      printerId,
+      file: fileBase64,
+      copies: options.copies || 1,
+    });
+  }
+
   /** Register event listener (open, close, error, message) */
   on(event, fn) { if (this._listeners[event]) this._listeners[event].push(fn); return this; }
 

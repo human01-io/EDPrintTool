@@ -94,7 +94,7 @@ const DEFAULT_SETTINGS = {
   codepage: '',              // '' = printer default, or 'cp437', 'cp850', 'cp858', 'cp1252'
   printerProfile: 'generic', // printer capability profile
   // ESC/POS settings
-  paperWidth: '80mm',         // '80mm' or '58mm'
+  paperWidth: '80mm',         // '80mm', '72mm', or '58mm'
   autoCut: true,              // send cut command after print
   cutType: 'partial',         // 'full' or 'partial'
   feedLines: 4,               // lines to feed before cut
@@ -514,6 +514,97 @@ async function print(printerId, content, options = {}) {
   throw new Error(`Unknown printer type: ${p.type}`);
 }
 
+// ─── Document (PDF) printing ─────────────────────────────────
+// Prints through the OS spooler (not raw mode), so the driver handles rendering.
+
+/**
+ * Print a PDF document via CUPS (macOS/Linux).
+ * Uses `lp` without the `-o raw` flag so CUPS renders the PDF.
+ */
+function printDocumentCUPS(queue, filePath, copies = 1) {
+  return new Promise((resolve, reject) => {
+    const args = ['-d', queue, '-n', String(copies), filePath];
+    execFile('lp', args, (err, stdout) => {
+      if (err) {
+        reject(new Error(`CUPS document print failed (${queue}): ${err.message}`));
+        return;
+      }
+      resolve({ success: true, method: 'cups-document', queue, output: stdout.trim() });
+    });
+  });
+}
+
+/**
+ * Print a PDF document via Windows print spooler.
+ * Uses PowerShell Start-Process with -Verb PrintTo to print through the
+ * default PDF handler (Edge, Adobe, Sumatra, etc.) to the specified printer.
+ */
+function printDocumentWindows(printerName, filePath, copies = 1) {
+  return new Promise((resolve, reject) => {
+    // PowerShell script: print using the system's registered PDF handler
+    const ps1 = `
+param([string]$PrinterName, [string]$FilePath, [int]$Copies)
+for ($i = 0; $i -lt $Copies; $i++) {
+  Start-Process -FilePath $FilePath -Verb PrintTo -ArgumentList $PrinterName -Wait -WindowStyle Hidden
+}
+Write-Output "OK: Printed $Copies copy/copies to $PrinterName"
+`;
+    const tmpPs1 = path.join(os.tmpdir(), 'edprint_doc_' + Date.now() + '.ps1');
+    fs.writeFileSync(tmpPs1, ps1, 'utf8');
+
+    execFile('powershell', [
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+      '-File', tmpPs1, '-PrinterName', printerName, '-FilePath', filePath, '-Copies', String(copies),
+    ], { timeout: 60000 }, (err, stdout, stderr) => {
+      try { fs.unlinkSync(tmpPs1); } catch {}
+
+      const output = (stdout || '').trim();
+      const errors = (stderr || '').trim();
+
+      if (err) {
+        reject(new Error('Windows document print failed (' + printerName + '): ' + (errors || output || err.message)));
+        return;
+      }
+      resolve({ success: true, method: 'windows-document', printer: printerName, detail: output });
+    });
+  });
+}
+
+/**
+ * Print a PDF document to a configured printer.
+ * Accepts a base64-encoded PDF, saves to temp file, prints via OS spooler.
+ * Only works with USB/spooler printers — not raw network (port 9100).
+ */
+async function printDocument(printerId, fileBase64, options = {}) {
+  const p = printers.get(printerId);
+  if (!p) throw new Error(`Printer not found: ${printerId}`);
+
+  if (p.type === 'network') {
+    throw new Error('Document printing is not supported for network (port 9100) printers. Use a USB/spooler printer instead.');
+  }
+
+  const copies = options.copies || 1;
+
+  // Save base64 PDF to temp file
+  const tmpFile = path.join(os.tmpdir(), 'edprint_' + Date.now() + '.pdf');
+  fs.writeFileSync(tmpFile, Buffer.from(fileBase64, 'base64'));
+
+  try {
+    let result;
+    if (os.platform() === 'win32') {
+      if (!p.windowsPrinter) throw new Error(`No Windows printer name configured for: ${printerId}`);
+      result = await printDocumentWindows(p.windowsPrinter, tmpFile, copies);
+    } else {
+      if (!p.cupsQueue) throw new Error(`No CUPS queue configured for printer: ${printerId}`);
+      result = await printDocumentCUPS(p.cupsQueue, tmpFile, copies);
+    }
+    return result;
+  } finally {
+    // Clean up temp file
+    try { fs.unlinkSync(tmpFile); } catch {}
+  }
+}
+
 module.exports = {
   addPrinter,
   updatePrinterSettings,
@@ -524,6 +615,7 @@ module.exports = {
   printNetwork,
   printCUPS,
   printWindows,
+  printDocument,
   discoverPrinters,
   getLabelPresets,
   buildSetupZPL,

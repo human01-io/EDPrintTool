@@ -129,7 +129,7 @@ public class HttpServer
             await WriteJson(res, 200, new
             {
                 status = "running",
-                version = "1.0.0",
+                version = "1.2.0",
                 printers = _store.GetPrinters().Count,
             });
             return;
@@ -356,6 +356,43 @@ public class HttpServer
             return;
         }
 
+        // POST /api/print-document/{printerId} — print PDF through OS spooler
+        if (method == "POST" && path.StartsWith("/api/print-document/"))
+        {
+            var printerId = ExtractSegment(path, 2);
+            var body = await ReadBody(req);
+
+            try
+            {
+                var obj = JsonNode.Parse(body)?.AsObject();
+                var fileBase64 = obj?["file"]?.GetValue<string>();
+                var copies = obj?["copies"]?.GetValue<int>() ?? 1;
+
+                if (string.IsNullOrWhiteSpace(fileBase64))
+                {
+                    await WriteJson(res, 400, new { error = "Missing file (base64-encoded PDF)" });
+                    return;
+                }
+
+                var printer = _store.GetPrinter(printerId);
+                if (printer == null)
+                {
+                    await WriteJson(res, 404, new { error = $"Printer not found: {printerId}" });
+                    return;
+                }
+
+                var result = await RawPrinter.PrintDocumentAsync(printer, fileBase64, copies);
+                OnActivity?.Invoke($"Document print OK ({copies}x) → {printerId}", false);
+                await WriteJson(res, 200, new { success = true, message = result });
+            }
+            catch (Exception ex)
+            {
+                OnActivity?.Invoke($"Document print FAILED → {printerId}: {ex.Message}", true);
+                await WriteJson(res, 500, new { error = ex.Message });
+            }
+            return;
+        }
+
         // POST /api/print-raw
         if (method == "POST" && path == "/api/print-raw")
         {
@@ -427,7 +464,7 @@ public class HttpServer
             switch (action)
             {
                 case "status":
-                    return JsonOk(requestId, new { status = "running", version = "1.0.0", printers = _store.GetPrinters().Count });
+                    return JsonOk(requestId, new { status = "running", version = "1.2.0", printers = _store.GetPrinters().Count });
 
                 case "listPrinters":
                     return JsonOk(requestId, _store.GetPrinters());
@@ -500,6 +537,19 @@ public class HttpServer
                     if (host == null || zpl == null) return JsonErr(requestId, "Missing host or zpl");
                     var result = await RawPrinter.PrintNetworkAsync(host, port, zpl);
                     return JsonOk(requestId, new { success = true, message = result });
+                }
+
+                case "printDocument":
+                {
+                    var pid3 = msg["printerId"]?.GetValue<string>();
+                    var file = msg["file"]?.GetValue<string>();
+                    var copies3 = msg["copies"]?.GetValue<int>() ?? 1;
+                    if (pid3 == null || file == null) return JsonErr(requestId, "Missing printerId or file");
+                    var p3 = _store.GetPrinter(pid3);
+                    if (p3 == null) return JsonErr(requestId, $"Printer not found: {pid3}");
+                    var result3 = await RawPrinter.PrintDocumentAsync(p3, file, copies3);
+                    OnActivity?.Invoke($"Document print OK ({copies3}x) → {pid3}", false);
+                    return JsonOk(requestId, new { success = true, message = result3 });
                 }
 
                 default:

@@ -490,6 +490,7 @@
                       <label>Paper Width</label>
                       <select id="set-pw-${p.id}">
                         <option value="80mm" ${(s.paperWidth || '80mm') === '80mm' ? 'selected' : ''}>80mm</option>
+                        <option value="72mm" ${s.paperWidth === '72mm' ? 'selected' : ''}>72mm</option>
                         <option value="58mm" ${s.paperWidth === '58mm' ? 'selected' : ''}>58mm</option>
                       </select>
                     </div>

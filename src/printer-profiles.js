@@ -13,7 +13,7 @@
 const PROFILES = {
   'generic': {
     name: 'Generic ESC/POS',
-    columns: { '80mm': 48, '58mm': 32 },
+    columns: { '80mm': 48, '72mm': 42, '58mm': 32 },
     features: {
       cut: true,
       partialCut: true,
@@ -31,7 +31,7 @@ const PROFILES = {
 
   'epson': {
     name: 'Epson TM Series',
-    columns: { '80mm': 48, '58mm': 32 },
+    columns: { '80mm': 48, '72mm': 42, '58mm': 32 },
     features: {
       cut: true,
       partialCut: true,
@@ -49,7 +49,7 @@ const PROFILES = {
 
   'star': {
     name: 'Star TSP Series (ESC/POS mode)',
-    columns: { '80mm': 48, '58mm': 32 },
+    columns: { '80mm': 48, '72mm': 42, '58mm': 32 },
     features: {
       cut: true,
       partialCut: true,
@@ -67,7 +67,7 @@ const PROFILES = {
 
   'bixolon': {
     name: 'Bixolon SRP Series',
-    columns: { '80mm': 48, '58mm': 32 },
+    columns: { '80mm': 48, '72mm': 42, '58mm': 32 },
     features: {
       cut: true,
       partialCut: true,
@@ -85,7 +85,7 @@ const PROFILES = {
 
   'citizen': {
     name: 'Citizen CT Series',
-    columns: { '80mm': 48, '58mm': 32 },
+    columns: { '80mm': 48, '72mm': 42, '58mm': 32 },
     features: {
       cut: true,
       partialCut: true,
@@ -103,7 +103,7 @@ const PROFILES = {
 
   'custom': {
     name: 'Custom (user-defined)',
-    columns: { '80mm': 48, '58mm': 32 },
+    columns: { '80mm': 48, '72mm': 42, '58mm': 32 },
     features: {
       cut: true,
       partialCut: true,

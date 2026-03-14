@@ -3,7 +3,7 @@
   "info": {
     "title": "EDPrintTool API",
     "description": "REST API for sending raw ZPL and ESC/POS commands to thermal printers. Free QZ Tray alternative.",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": {
       "name": "MIT"
     }
@@ -37,7 +37,7 @@
                 },
                 "example": {
                   "status": "running",
-                  "version": "1.0.0",
+                  "version": "1.2.0",
                   "printers": 2
                 }
               }
@@ -423,6 +423,69 @@
         }
       }
     },
+    "/api/print-document/{printerId}": {
+      "post": {
+        "tags": ["Printing"],
+        "summary": "Print PDF document",
+        "description": "Print a PDF file through the OS print spooler. The PDF is rendered by the OS print driver, not sent as raw bytes. Only works with USB/spooler printers — network (port 9100) printers are not supported since they only accept raw printer commands.",
+        "operationId": "printDocument",
+        "parameters": [
+          {
+            "name": "printerId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Printer ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/DocumentPrintRequest" },
+              "example": {
+                "file": "JVBERi0xLjQK... (base64-encoded PDF)",
+                "copies": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Print job sent",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PrintResult" }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing file data",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Printer not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "Print failed (e.g. network printer, no PDF handler)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/print-raw": {
       "post": {
         "tags": ["Printing"],
@@ -524,7 +587,7 @@
         "type": "object",
         "properties": {
           "status": { "type": "string", "example": "running" },
-          "version": { "type": "string", "example": "1.0.0" },
+          "version": { "type": "string", "example": "1.2.0" },
           "printers": { "type": "integer", "description": "Number of configured printers", "example": 2 }
         }
       },
@@ -544,7 +607,7 @@
           "printMode": { "type": "string", "enum": ["T", "P", "C"], "description": "T=tear-off, P=peel-off, C=cutter", "default": "T" },
           "codepage": { "type": "string", "enum": ["", "cp437", "cp850", "cp858", "cp860", "cp863", "cp865", "cp1252"], "description": "Code page for text encoding. Default cp1252 supports Spanish/Western European characters (á é í ó ú ñ ¡ ¿).", "default": "cp1252" },
           "printerProfile": { "type": "string", "enum": ["generic", "epson", "star", "bixolon", "citizen", "custom"], "description": "ESC/POS printer capability profile", "default": "generic" },
-          "paperWidth": { "type": "string", "enum": ["80mm", "58mm"], "description": "ESC/POS paper width", "default": "80mm" },
+          "paperWidth": { "type": "string", "enum": ["80mm", "72mm", "58mm"], "description": "ESC/POS paper width", "default": "80mm" },
           "autoCut": { "type": "boolean", "description": "Send cut command after ESC/POS print", "default": true },
           "cutType": { "type": "string", "enum": ["partial", "full"], "description": "ESC/POS cut type", "default": "partial" },
           "feedLines": { "type": "integer", "description": "Lines to feed before cutting", "default": 4 }
@@ -604,11 +667,19 @@
             "description": "Array of ESC/POS commands. Each command is `[method, ...args]`.",
             "items": {
               "type": "array",
-              "description": "Command as [method, ...args]. Available methods: initialize, codepage, line, text, raw, newline, empty, bold, underline, align, font, textSize, invert, rule, columns, pair, feed, cut, openCashDrawer",
+              "description": "Command as [method, ...args]. Available methods: initialize, codepage, line, text, raw, newline, empty, bold, underline, align, font, textSize, invert, rule, columns, pair, feed, cut, openCashDrawer, barcode, qrcode, pdf417",
               "items": {},
               "example": ["line", "Hello World"]
             }
           },
+          "copies": { "type": "integer", "minimum": 1, "description": "Number of copies", "default": 1 }
+        }
+      },
+      "DocumentPrintRequest": {
+        "type": "object",
+        "required": ["file"],
+        "properties": {
+          "file": { "type": "string", "description": "Base64-encoded PDF file" },
           "copies": { "type": "integer", "minimum": 1, "description": "Number of copies", "default": 1 }
         }
       },
@@ -625,7 +696,7 @@
         "type": "object",
         "properties": {
           "success": { "type": "boolean", "example": true },
-          "method": { "type": "string", "description": "Print method used", "enum": ["network", "cups", "windows-raw"], "example": "network" },
+          "method": { "type": "string", "description": "Print method used", "enum": ["network", "cups", "windows-raw", "cups-document", "windows-document"], "example": "network" },
           "host": { "type": "string", "description": "Printer host (network)", "example": "192.168.1.100" },
           "port": { "type": "integer", "description": "Printer port (network)", "example": 9100 },
           "queue": { "type": "string", "description": "CUPS queue name (CUPS)" },

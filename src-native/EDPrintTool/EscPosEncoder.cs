@@ -22,6 +22,7 @@ public class EscPosEncoder
     public static readonly Dictionary<string, int> ColumnsByWidth = new()
     {
         ["80mm"] = 48,
+        ["72mm"] = 42,
         ["58mm"] = 32,
     };
 
@@ -250,6 +251,90 @@ public class EscPosEncoder
     public EscPosEncoder OpenCashDrawer(int pin = 0)
     {
         Write(0x1B, 0x70, (byte)(pin & 1), 25, 250);
+        return this;
+    }
+
+    // ─── Barcodes & 2D codes ─────────────────────────────────
+
+    /// <summary>GS k — Print a 1D barcode.</summary>
+    public EscPosEncoder Barcode(string data, string type = "CODE128", int height = 80, int width = 2, string hri = "below")
+    {
+        var typeMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["UPC-A"] = 65, ["UPC-E"] = 66, ["EAN13"] = 67, ["EAN8"] = 68,
+            ["CODE39"] = 69, ["ITF"] = 70, ["CODABAR"] = 71, ["CODE93"] = 72,
+            ["CODE128"] = 73,
+        };
+        if (!typeMap.TryGetValue(type, out var m)) return this;
+
+        var hriMap = new Dictionary<string, byte> { ["none"] = 0, ["above"] = 1, ["below"] = 2, ["both"] = 3 };
+        byte hriVal = hriMap.GetValueOrDefault(hri, 2);
+        height = Math.Clamp(height, 1, 255);
+        width = Math.Clamp(width, 2, 6);
+
+        var dataBytes = Encoding.ASCII.GetBytes(data);
+        // GS h n — barcode height
+        Write(0x1D, 0x68, (byte)height);
+        // GS w n — barcode width
+        Write(0x1D, 0x77, (byte)width);
+        // GS H n — HRI position
+        Write(0x1D, 0x48, hriVal);
+        // GS k m n data — print barcode (Function B)
+        Write(0x1D, 0x6B, m, (byte)dataBytes.Length);
+        _stream.Write(dataBytes);
+        return this;
+    }
+
+    /// <summary>GS ( k — Print a QR code.</summary>
+    public EscPosEncoder Qrcode(string data, int size = 6, string errorCorrection = "M")
+    {
+        size = Math.Clamp(size, 1, 16);
+        var ecMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase)
+            { ["L"] = 48, ["M"] = 49, ["Q"] = 50, ["H"] = 51 };
+        byte ec = ecMap.GetValueOrDefault(errorCorrection, 49);
+        var dataBytes = Encoding.UTF8.GetBytes(data);
+
+        // Select model 2
+        Write(0x1D, 0x28, 0x6B, 4, 0, 0x31, 0x41, 50, 0);
+        // Set module size
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x43, (byte)size);
+        // Set error correction
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x45, ec);
+        // Store data
+        int storeLen = dataBytes.Length + 3;
+        Write(0x1D, 0x28, 0x6B, (byte)(storeLen & 0xFF), (byte)((storeLen >> 8) & 0xFF), 0x31, 0x50, 0x30);
+        _stream.Write(dataBytes);
+        // Print
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x51, 0x30);
+        return this;
+    }
+
+    /// <summary>GS ( k — Print a PDF417 barcode.</summary>
+    public EscPosEncoder Pdf417(string data, int columns = 0, int rows = 0, int width = 3, int height = 3, int errorCorrection = 1)
+    {
+        columns = Math.Clamp(columns, 0, 30);
+        rows = Math.Clamp(rows, 0, 90);
+        width = Math.Clamp(width, 2, 8);
+        height = Math.Clamp(height, 2, 8);
+        errorCorrection = Math.Clamp(errorCorrection, 0, 8);
+        var dataBytes = Encoding.UTF8.GetBytes(data);
+
+        // Set columns
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x41, (byte)columns);
+        // Set rows
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x42, (byte)rows);
+        // Set module width
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x43, (byte)width);
+        // Set row height
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x44, (byte)height);
+        // Set error correction
+        Write(0x1D, 0x28, 0x6B, 4, 0, 0x30, 0x45, (byte)(48 + errorCorrection), 0);
+        // Store data
+        int storeLen = dataBytes.Length + 3;
+        Write(0x1D, 0x28, 0x6B, (byte)(storeLen & 0xFF), (byte)((storeLen >> 8) & 0xFF), 0x30, 0x50, 0x30);
+        _stream.Write(dataBytes);
+        // Print
+        Write(0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x51, 0x30);
         return this;
     }
 

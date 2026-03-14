@@ -39,7 +39,7 @@ public class PrinterSettings
 
     // ESC/POS specific
     [JsonPropertyName("paperWidth")]
-    public string PaperWidth { get; set; } = "80mm"; // "80mm" | "58mm"
+    public string PaperWidth { get; set; } = "80mm"; // "80mm" | "72mm" | "58mm"
 
     [JsonPropertyName("autoCut")]
     public bool AutoCut { get; set; } = true;

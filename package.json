@@ -1,6 +1,6 @@
 {
   "name": "edprinttool",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Free QZ Tray alternative — send raw ZPL to Zebra thermal printers from any web app",
   "main": "src/server.js",
   "scripts": {

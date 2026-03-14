@@ -229,7 +229,7 @@ public class MainForm : Form
 
         var pwLbl = new Label { Text = "Paper Width:", Left = 10, Top = 2, ForeColor = MutedColor, AutoSize = true, Font = normalFont };
         _setPaperWidth = new ComboBox { Left = 10, Top = 20, Width = 120, DropDownStyle = ComboBoxStyle.DropDownList, BackColor = BgColor, ForeColor = TextColor, FlatStyle = FlatStyle.Flat, Font = normalFont };
-        _setPaperWidth.Items.AddRange(new object[] { "80mm", "58mm" });
+        _setPaperWidth.Items.AddRange(new object[] { "80mm", "72mm", "58mm" });
 
         _setAutoCut = new CheckBox { Text = "Auto Cut", Left = 160, Top = 22, ForeColor = TextColor, AutoSize = true, Font = normalFont, Checked = true };
 

@@ -97,6 +97,14 @@ fetch('http://localhost:8189/api/print-escpos/my-printer-id', {
   })
 });
 
+// Print a PDF document (USB/spooler printers only)
+const pdfBase64 = btoa(/* ... raw PDF bytes ... */); // or use FileReader
+fetch('http://localhost:8189/api/print-document/my-printer-id', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ file: pdfBase64, copies: 1 })
+});
+
 // Quick print — send raw data to an IP:port without saving a printer
 fetch('http://localhost:8189/api/print-raw', {
   method: 'POST',
@@ -126,6 +134,7 @@ fetch('http://localhost:8189/api/print-raw', {
 | `DELETE` | `/api/printers/:id` | Remove a printer |
 | `POST` | `/api/print/:id` | Print ZPL to a printer |
 | `POST` | `/api/print-escpos/:id` | Print ESC/POS commands to a printer |
+| `POST` | `/api/print-document/:id` | Print PDF through OS spooler (USB only) |
 | `POST` | `/api/print-raw` | Quick print to IP:port (no saved printer) |
 
 ### WebSocket
@@ -164,7 +173,7 @@ Responses include the `requestId` for correlation:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `paperWidth` | `80mm` | Paper width (80mm or 58mm) |
+| `paperWidth` | `80mm` | Paper width (80mm, 72mm, or 58mm) |
 | `autoCut` | `true` | Send cut command after print |
 | `cutType` | `partial` | `partial` or `full` cut |
 | `feedLines` | `4` | Lines to feed before cutting |
@@ -212,6 +221,47 @@ The ESC/POS endpoint accepts an array of commands, each as `[method, ...args]`:
 | `feed` | `[lines]` | Feed paper |
 | `cut` | `[type, feedLines]` | Cut paper (`"partial"` or `"full"`) |
 | `openCashDrawer` | `[pin]` | Open cash drawer (0=pin 2, 1=pin 5) |
+| `barcode` | `data, {options}` | Print 1D barcode (see below) |
+| `qrcode` | `data, {options}` | Print QR code (see below) |
+| `pdf417` | `data, {options}` | Print PDF417 barcode (see below) |
+
+### Barcode Options
+
+```json
+["barcode", "12345678", { "type": "CODE128", "height": 80, "width": 2, "hri": "below" }]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `type` | `CODE128` | `UPC-A`, `UPC-E`, `EAN13`, `EAN8`, `CODE39`, `ITF`, `CODABAR`, `CODE93`, `CODE128` |
+| `height` | `80` | Barcode height in dots (1–255) |
+| `width` | `2` | Bar width multiplier (2–6) |
+| `hri` | `below` | Human-readable text: `none`, `above`, `below`, `both` |
+
+### QR Code Options
+
+```json
+["qrcode", "https://example.com", { "size": 6, "errorCorrection": "M" }]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `size` | `6` | Module size in dots (1–16) |
+| `errorCorrection` | `M` | Error correction level: `L` (7%), `M` (15%), `Q` (25%), `H` (30%) |
+
+### PDF417 Options
+
+```json
+["pdf417", "Invoice data here", { "columns": 0, "width": 3, "errorCorrection": 1 }]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `columns` | `0` | Number of columns (0=auto, 1–30) |
+| `rows` | `0` | Number of rows (0=auto, 3–90) |
+| `width` | `3` | Module width (2–8) |
+| `height` | `3` | Row height (2–8) |
+| `errorCorrection` | `1` | Error correction level (0–8) |
 
 ## Windows Desktop App
 

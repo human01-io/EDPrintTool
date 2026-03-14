@@ -37,13 +37,14 @@ const CODEPAGES = {
 // Paper width → default character columns (Font A, 12x24)
 const COLUMNS = {
   '80mm': 48,
+  '72mm': 42,
   '58mm': 32,
 };
 
 class EscPosEncoder {
   /**
    * @param {object} [options]
-   * @param {string} [options.paperWidth='80mm'] - '80mm' or '58mm'
+   * @param {string} [options.paperWidth='80mm'] - '80mm', '72mm', or '58mm'
    * @param {number} [options.columns] - override character columns
    * @param {string} [options.codepage] - default code page name
    */
@@ -263,6 +264,110 @@ class EscPosEncoder {
    */
   openCashDrawer(pin = 0) {
     this._parts.push(Buffer.from([0x1B, 0x70, pin & 1, 25, 250]));
+    return this;
+  }
+
+  // ─── Barcodes & 2D codes ─────────────────────────────────
+
+  /**
+   * GS k — Print a 1D barcode.
+   * @param {string} data - barcode data
+   * @param {object} [options]
+   * @param {string} [options.type='CODE128'] - barcode type
+   * @param {number} [options.height=80] - barcode height in dots (1-255)
+   * @param {number} [options.width=2] - bar width (2-6)
+   * @param {string} [options.hri='below'] - HRI position: 'none','above','below','both'
+   */
+  barcode(data, options = {}) {
+    const type = (options.type || 'CODE128').toUpperCase();
+    const height = Math.max(1, Math.min(255, options.height || 80));
+    const width = Math.max(2, Math.min(6, options.width || 2));
+    const hriMap = { none: 0, above: 1, below: 2, both: 3 };
+    const hri = hriMap[options.hri || 'below'] ?? 2;
+
+    const typeMap = {
+      'UPC-A': 65, 'UPC-E': 66, 'EAN13': 67, 'EAN8': 68,
+      'CODE39': 69, 'ITF': 70, 'CODABAR': 71, 'CODE93': 72,
+      'CODE128': 73,
+    };
+    const m = typeMap[type];
+    if (m === undefined) return this;
+
+    // GS h n — set barcode height
+    this._parts.push(Buffer.from([0x1D, 0x68, height]));
+    // GS w n — set barcode width
+    this._parts.push(Buffer.from([0x1D, 0x77, width]));
+    // GS H n — set HRI position
+    this._parts.push(Buffer.from([0x1D, 0x48, hri]));
+    // GS k m n data — print barcode (Function B format)
+    const dataBytes = Buffer.from(data, 'ascii');
+    this._parts.push(Buffer.from([0x1D, 0x6B, m, dataBytes.length]));
+    this._parts.push(dataBytes);
+    return this;
+  }
+
+  /**
+   * GS ( k — Print a QR code.
+   * @param {string} data - QR code content
+   * @param {object} [options]
+   * @param {number} [options.size=6] - module size (1-16)
+   * @param {string} [options.errorCorrection='M'] - error correction: 'L','M','Q','H'
+   */
+  qrcode(data, options = {}) {
+    const size = Math.max(1, Math.min(16, options.size || 6));
+    const ecMap = { L: 48, M: 49, Q: 50, H: 51 };
+    const ec = ecMap[(options.errorCorrection || 'M').toUpperCase()] ?? 49;
+    const dataBytes = Buffer.from(data, 'utf8');
+
+    // QR Code: function 165 — select model 2
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 4, 0, 0x31, 0x41, 50, 0]));
+    // QR Code: function 167 — set module size
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x43, size]));
+    // QR Code: function 169 — set error correction
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x45, ec]));
+    // QR Code: function 180 — store data
+    const storeLen = dataBytes.length + 3;
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, storeLen & 0xFF, (storeLen >> 8) & 0xFF, 0x31, 0x50, 0x30]));
+    this._parts.push(dataBytes);
+    // QR Code: function 181 — print
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x51, 0x30]));
+    return this;
+  }
+
+  /**
+   * GS ( k — Print a PDF417 barcode.
+   * @param {string} data - PDF417 content
+   * @param {object} [options]
+   * @param {number} [options.columns=0] - number of columns (0=auto, 1-30)
+   * @param {number} [options.rows=0] - number of rows (0=auto, 3-90)
+   * @param {number} [options.width=3] - module width (2-8)
+   * @param {number} [options.height=3] - row height (2-8)
+   * @param {number} [options.errorCorrection=1] - error correction level (0-8)
+   */
+  pdf417(data, options = {}) {
+    const columns = Math.max(0, Math.min(30, options.columns || 0));
+    const rows = Math.max(0, Math.min(90, options.rows || 0));
+    const width = Math.max(2, Math.min(8, options.width || 3));
+    const height = Math.max(2, Math.min(8, options.height || 3));
+    const ec = Math.max(0, Math.min(8, options.errorCorrection ?? 1));
+    const dataBytes = Buffer.from(data, 'utf8');
+
+    // PDF417: function 65 — set number of columns
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x41, columns]));
+    // PDF417: function 66 — set number of rows
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x42, rows]));
+    // PDF417: function 67 — set module width
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x43, width]));
+    // PDF417: function 68 — set row height
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x44, height]));
+    // PDF417: function 69 — set error correction level
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 4, 0, 0x30, 0x45, 48 + ec, 0]));
+    // PDF417: function 80 — store data
+    const storeLen = dataBytes.length + 3;
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, storeLen & 0xFF, (storeLen >> 8) & 0xFF, 0x30, 0x50, 0x30]));
+    this._parts.push(dataBytes);
+    // PDF417: function 81 — print
+    this._parts.push(Buffer.from([0x1D, 0x28, 0x6B, 3, 0, 0x30, 0x51, 0x30]));
     return this;
   }
 

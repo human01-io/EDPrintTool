@@ -35,7 +35,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Health check
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'running', version: '1.0.0', printers: printer.getPrinters().length });
+  res.json({ status: 'running', version: '1.2.0', printers: printer.getPrinters().length });
 });
 
 // Label presets
@@ -182,6 +182,18 @@ app.post('/api/print-escpos/:printerId', async (req, res) => {
   }
 });
 
+// Print a PDF document through the OS spooler (USB printers only)
+app.post('/api/print-document/:printerId', async (req, res) => {
+  try {
+    const { file, copies = 1 } = req.body;
+    if (!file) return res.status(400).json({ error: 'Missing file (base64-encoded PDF)' });
+    const result = await printer.printDocument(req.params.printerId, file, { copies });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Quick print — send ZPL directly to an IP:port without saving the printer
 app.post('/api/print-raw', async (req, res) => {
   try {
@@ -219,7 +231,7 @@ wss.on('connection', (ws) => {
 
       switch (action) {
         case 'status':
-          result = { status: 'running', version: '1.0.0', printers: printer.getPrinters().length };
+          result = { status: 'running', version: '1.2.0', printers: printer.getPrinters().length };
           break;
 
         case 'listPrinters':
@@ -260,6 +272,13 @@ wss.on('connection', (ws) => {
           result = await printer.printNetwork(msg.host, msg.port || 9100, msg.zpl);
           break;
 
+        case 'printDocument':
+          if (!msg.printerId || !msg.file) throw new Error('Missing printerId or file');
+          result = await printer.printDocument(msg.printerId, msg.file, {
+            copies: msg.copies || 1,
+          });
+          break;
+
         default:
           throw new Error(`Unknown action: ${action}`);
       }
@@ -289,7 +308,7 @@ if (require.main === module) {
   start().then(() => {
     console.log(`
   ╔══════════════════════════════════════════╗
-  ║          EDPrintTool v1.0.0              ║
+  ║          EDPrintTool v1.2.0              ║
   ╠══════════════════════════════════════════╣
   ║  Dashboard:  http://localhost:${PORT}       ║
   ║  REST API:   http://localhost:${PORT}/api   ║

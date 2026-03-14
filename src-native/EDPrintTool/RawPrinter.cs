@@ -330,6 +330,41 @@ public static class RawPrinter
             case "openCashDrawer":
                 enc.OpenCashDrawer(args.Count > 1 ? args[1]!.GetValue<int>() : 0);
                 break;
+            case "barcode":
+                if (args.Count > 1)
+                {
+                    var bData = args[1]!.GetValue<string>();
+                    var bOpts = args.Count > 2 && args[2] is JsonObject bObj ? bObj : null;
+                    enc.Barcode(bData,
+                        bOpts?["type"]?.GetValue<string>() ?? "CODE128",
+                        bOpts?["height"]?.GetValue<int>() ?? 80,
+                        bOpts?["width"]?.GetValue<int>() ?? 2,
+                        bOpts?["hri"]?.GetValue<string>() ?? "below");
+                }
+                break;
+            case "qrcode":
+                if (args.Count > 1)
+                {
+                    var qData = args[1]!.GetValue<string>();
+                    var qOpts = args.Count > 2 && args[2] is JsonObject qObj ? qObj : null;
+                    enc.Qrcode(qData,
+                        qOpts?["size"]?.GetValue<int>() ?? 6,
+                        qOpts?["errorCorrection"]?.GetValue<string>() ?? "M");
+                }
+                break;
+            case "pdf417":
+                if (args.Count > 1)
+                {
+                    var pData = args[1]!.GetValue<string>();
+                    var pOpts = args.Count > 2 && args[2] is JsonObject pObj ? pObj : null;
+                    enc.Pdf417(pData,
+                        pOpts?["columns"]?.GetValue<int>() ?? 0,
+                        pOpts?["rows"]?.GetValue<int>() ?? 0,
+                        pOpts?["width"]?.GetValue<int>() ?? 3,
+                        pOpts?["height"]?.GetValue<int>() ?? 3,
+                        pOpts?["errorCorrection"]?.GetValue<int>() ?? 1);
+                }
+                break;
         }
     }
 
@@ -354,5 +389,106 @@ public static class RawPrinter
 
             _ => throw new Exception($"Unknown printer type: {printer.Type}")
         };
+    }
+
+    // ─── Document (PDF) printing ─────────────────────────────────
+    // Prints through the OS spooler (not raw mode), so the driver handles rendering.
+
+    /// <summary>
+    /// Print a PDF document to a configured printer via the OS spooler.
+    /// Only works with USB/spooler printers — not raw network (port 9100).
+    /// </summary>
+    public static async Task<string> PrintDocumentAsync(PrinterInfo printer, string fileBase64, int copies = 1)
+    {
+        if (printer.Type == "network")
+            throw new Exception("Document printing is not supported for network (port 9100) printers. Use a USB/spooler printer instead.");
+
+        // Save base64 PDF to temp file
+        var tmpFile = Path.Combine(Path.GetTempPath(), $"edprint_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.pdf");
+        await File.WriteAllBytesAsync(tmpFile, Convert.FromBase64String(fileBase64));
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var printerName = printer.WindowsPrinter
+                    ?? throw new Exception($"No Windows printer name configured for: {printer.Id}");
+                return await PrintDocumentWindowsAsync(printerName, tmpFile, copies);
+            }
+            else
+            {
+                var queue = printer.CupsQueue
+                    ?? throw new Exception($"No CUPS queue configured for printer: {printer.Id}");
+                return await PrintDocumentCupsAsync(queue, tmpFile, copies);
+            }
+        }
+        finally
+        {
+            try { File.Delete(tmpFile); } catch { }
+        }
+    }
+
+    /// <summary>Print PDF via CUPS lp command (without -o raw, so CUPS renders it).</summary>
+    private static Task<string> PrintDocumentCupsAsync(string queue, string filePath, int copies)
+    {
+        var tcs = new TaskCompletionSource<string>();
+        var psi = new System.Diagnostics.ProcessStartInfo("lp", $"-d {queue} -n {copies} \"{filePath}\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        var proc = System.Diagnostics.Process.Start(psi)!;
+        proc.EnableRaisingEvents = true;
+        proc.Exited += (_, _) =>
+        {
+            var stdout = proc.StandardOutput.ReadToEnd().Trim();
+            var stderr = proc.StandardError.ReadToEnd().Trim();
+            if (proc.ExitCode != 0)
+                tcs.SetException(new Exception($"CUPS document print failed ({queue}): {stderr}"));
+            else
+                tcs.SetResult($"OK: {stdout}");
+            proc.Dispose();
+        };
+        return tcs.Task;
+    }
+
+    /// <summary>Print PDF via Windows Start-Process -Verb PrintTo.</summary>
+    private static Task<string> PrintDocumentWindowsAsync(string printerName, string filePath, int copies)
+    {
+        var tcs = new TaskCompletionSource<string>();
+        var ps1 = $@"
+param()
+for ($i = 0; $i -lt {copies}; $i++) {{
+  Start-Process -FilePath '{filePath.Replace("'", "''")}' -Verb PrintTo -ArgumentList '{printerName.Replace("'", "''")}' -Wait -WindowStyle Hidden
+}}
+Write-Output 'OK: Printed {copies} copy/copies to {printerName}'
+";
+        var tmpPs1 = Path.Combine(Path.GetTempPath(), $"edprint_doc_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}.ps1");
+        File.WriteAllText(tmpPs1, ps1);
+
+        var psi = new System.Diagnostics.ProcessStartInfo("powershell",
+            $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"{tmpPs1}\"")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        var proc = System.Diagnostics.Process.Start(psi)!;
+        proc.EnableRaisingEvents = true;
+        proc.Exited += (_, _) =>
+        {
+            var stdout = proc.StandardOutput.ReadToEnd().Trim();
+            var stderr = proc.StandardError.ReadToEnd().Trim();
+            try { File.Delete(tmpPs1); } catch { }
+            if (proc.ExitCode != 0)
+                tcs.SetException(new Exception($"Windows document print failed ({printerName}): {stderr}"));
+            else
+                tcs.SetResult(stdout);
+            proc.Dispose();
+        };
+        return tcs.Task;
     }
 }
