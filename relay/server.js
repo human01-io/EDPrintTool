@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = parseInt(process.env.RELAY_PORT) || 8190;
+const PORT = parseInt(process.env.RELAY_PORT || process.env.PORT) || 8190;
 const ADMIN_KEY = process.env.RELAY_ADMIN_KEY || '';
 const DATA_DIR = process.env.RELAY_DATA_DIR || path.join(__dirname, 'data');
 const JOB_TIMEOUT = parseInt(process.env.RELAY_JOB_TIMEOUT) || 30000;
