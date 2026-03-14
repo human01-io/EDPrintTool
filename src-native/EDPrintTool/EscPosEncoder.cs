@@ -319,7 +319,7 @@ public class EscPosEncoder
         if (!typeMap.TryGetValue(type, out var m)) return this;
 
         var hriMap = new Dictionary<string, byte> { ["none"] = 0, ["above"] = 1, ["below"] = 2, ["both"] = 3 };
-        byte hriVal = hriMap.GetValueOrDefault(hri, 2);
+        byte hriVal = hriMap.TryGetValue(hri, out var hriV) ? hriV : (byte)2;
         height = Math.Clamp(height, 1, 255);
         width = Math.Clamp(width, 2, 6);
 
@@ -342,7 +342,7 @@ public class EscPosEncoder
         size = Math.Clamp(size, 1, 16);
         var ecMap = new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase)
             { ["L"] = 48, ["M"] = 49, ["Q"] = 50, ["H"] = 51 };
-        byte ec = ecMap.GetValueOrDefault(errorCorrection, 49);
+        byte ec = ecMap.TryGetValue(errorCorrection, out var ecV) ? ecV : (byte)49;
         var dataBytes = Encoding.UTF8.GetBytes(data);
 
         // Select model 2
