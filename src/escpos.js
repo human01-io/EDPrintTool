@@ -267,6 +267,63 @@ class EscPosEncoder {
     return this;
   }
 
+  // ─── Images ─────────────────────────────────────────────
+
+  // Max print width in dots per paper size (203 dpi print heads)
+  static IMAGE_WIDTHS = { '80mm': 576, '72mm': 512, '58mm': 384 };
+
+  /**
+   * GS v 0 — Print a 1-bit raster image.
+   *
+   * The caller must provide pre-processed 1-bit monochrome pixel data:
+   *   - Each bit = 1 pixel (1=black, 0=white), MSB first
+   *   - Rows are packed left-to-right, top-to-bottom
+   *   - Each row is (width / 8) bytes, padded to byte boundary
+   *   - Total data length must equal (width / 8) * height bytes
+   *
+   * @param {string} data - base64-encoded raw 1-bit pixel data (NOT a PNG/BMP file)
+   * @param {object} [options]
+   * @param {number} options.width - image width in pixels (must be multiple of 8)
+   * @param {number} [options.height] - image height in pixels (auto-calculated if omitted)
+   * @param {number} [options.mode=0] - 0=normal, 1=double width, 2=double height, 3=both
+   */
+  image(data, options = {}) {
+    if (!data) throw new Error('image: missing data (base64-encoded 1-bit pixel data)');
+
+    const imageBytes = Buffer.from(data, 'base64');
+    if (imageBytes.length === 0) throw new Error('image: data is empty after base64 decode');
+
+    const width = options.width;
+    if (!width || width <= 0) throw new Error('image: width is required and must be > 0');
+    if (width % 8 !== 0) throw new Error(`image: width must be a multiple of 8, got ${width}`);
+
+    const bytesPerLine = width / 8;
+    const height = options.height || Math.floor(imageBytes.length / bytesPerLine);
+
+    if (height <= 0) throw new Error('image: calculated height is 0 — check width and data length');
+
+    const expectedLen = bytesPerLine * height;
+    if (imageBytes.length < expectedLen) {
+      throw new Error(`image: data too short — expected ${expectedLen} bytes (${width}x${height} at 1bpp), got ${imageBytes.length}`);
+    }
+
+    if (width > 4096) throw new Error(`image: width ${width} exceeds maximum of 4096 pixels`);
+    if (height > 4096) throw new Error(`image: height ${height} exceeds maximum of 4096 pixels`);
+
+    const mode = Math.max(0, Math.min(3, options.mode || 0));
+
+    // GS v 0 m xL xH yL yH data
+    const xL = bytesPerLine & 0xFF;
+    const xH = (bytesPerLine >> 8) & 0xFF;
+    const yL = height & 0xFF;
+    const yH = (height >> 8) & 0xFF;
+
+    this._parts.push(Buffer.from([0x1D, 0x76, 0x30, mode, xL, xH, yL, yH]));
+    // Only send exactly the expected bytes (ignore any trailing data)
+    this._parts.push(imageBytes.subarray(0, expectedLen));
+    return this;
+  }
+
   // ─── Barcodes & 2D codes ─────────────────────────────────
 
   /**

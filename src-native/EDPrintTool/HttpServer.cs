@@ -129,7 +129,7 @@ public class HttpServer
             await WriteJson(res, 200, new
             {
                 status = "running",
-                version = "1.2.0",
+                version = "1.3.0",
                 printers = _store.GetPrinters().Count,
             });
             return;
@@ -464,7 +464,7 @@ public class HttpServer
             switch (action)
             {
                 case "status":
-                    return JsonOk(requestId, new { status = "running", version = "1.2.0", printers = _store.GetPrinters().Count });
+                    return JsonOk(requestId, new { status = "running", version = "1.3.0", printers = _store.GetPrinters().Count });
 
                 case "listPrinters":
                     return JsonOk(requestId, _store.GetPrinters());

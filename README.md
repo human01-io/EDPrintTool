@@ -221,9 +221,42 @@ The ESC/POS endpoint accepts an array of commands, each as `[method, ...args]`:
 | `feed` | `[lines]` | Feed paper |
 | `cut` | `[type, feedLines]` | Cut paper (`"partial"` or `"full"`) |
 | `openCashDrawer` | `[pin]` | Open cash drawer (0=pin 2, 1=pin 5) |
+| `image` | `data, {options}` | Print 1-bit raster image (see below) |
 | `barcode` | `data, {options}` | Print 1D barcode (see below) |
 | `qrcode` | `data, {options}` | Print QR code (see below) |
 | `pdf417` | `data, {options}` | Print PDF417 barcode (see below) |
+
+### Image Options
+
+```json
+["image", "<base64 1-bit pixel data>", { "width": 384 }]
+```
+
+Prints a **1-bit monochrome raster image** using `GS v 0`. The data must be raw pixel bytes — not a PNG, BMP, or JPEG file. Each bit represents one pixel (1=black, 0=white), MSB first, packed left-to-right, top-to-bottom.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `width` | *(required)* | Image width in pixels (must be a multiple of 8) |
+| `height` | *(auto)* | Image height in pixels. If omitted, calculated from data length |
+| `mode` | `0` | 0=normal, 1=double width, 2=double height, 3=both |
+
+**Preparing image data:**
+1. Convert your image to 1-bit monochrome (black & white, no grayscale)
+2. Each row = `width / 8` bytes. Total data = `(width / 8) * height` bytes
+3. Base64-encode the raw pixel bytes
+
+**Typical print widths** (203 dpi print heads):
+| Paper | Max width |
+|-------|-----------|
+| 80mm | 576 px |
+| 72mm | 512 px |
+| 58mm | 384 px |
+
+**Validation errors** returned if:
+- `width` is missing or not a multiple of 8
+- Data is empty or not valid base64
+- Data length doesn't match `width × height`
+- Width or height exceeds 4096 pixels
 
 ### Barcode Options
 

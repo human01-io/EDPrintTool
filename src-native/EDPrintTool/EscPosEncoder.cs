@@ -254,6 +254,57 @@ public class EscPosEncoder
         return this;
     }
 
+    // ─── Images ─────────────────────────────────────────────
+
+    /// <summary>
+    /// GS v 0 — Print a 1-bit raster image.
+    /// Data must be raw 1-bit monochrome pixels (1=black, 0=white), MSB first,
+    /// packed left-to-right top-to-bottom, each row = (width/8) bytes.
+    /// </summary>
+    public EscPosEncoder Image(string base64Data, int width, int? height = null, int mode = 0)
+    {
+        if (string.IsNullOrEmpty(base64Data))
+            throw new ArgumentException("image: missing data (base64-encoded 1-bit pixel data)");
+
+        byte[] imageBytes;
+        try { imageBytes = Convert.FromBase64String(base64Data); }
+        catch (FormatException) { throw new ArgumentException("image: invalid base64 data"); }
+
+        if (imageBytes.Length == 0)
+            throw new ArgumentException("image: data is empty after base64 decode");
+        if (width <= 0)
+            throw new ArgumentException("image: width must be > 0");
+        if (width % 8 != 0)
+            throw new ArgumentException($"image: width must be a multiple of 8, got {width}");
+
+        int bytesPerLine = width / 8;
+        int h = height ?? imageBytes.Length / bytesPerLine;
+
+        if (h <= 0)
+            throw new ArgumentException("image: calculated height is 0 — check width and data length");
+
+        int expectedLen = bytesPerLine * h;
+        if (imageBytes.Length < expectedLen)
+            throw new ArgumentException($"image: data too short — expected {expectedLen} bytes ({width}x{h} at 1bpp), got {imageBytes.Length}");
+
+        if (width > 4096)
+            throw new ArgumentException($"image: width {width} exceeds maximum of 4096 pixels");
+        if (h > 4096)
+            throw new ArgumentException($"image: height {h} exceeds maximum of 4096 pixels");
+
+        mode = Math.Clamp(mode, 0, 3);
+
+        // GS v 0 m xL xH yL yH data
+        byte xL = (byte)(bytesPerLine & 0xFF);
+        byte xH = (byte)((bytesPerLine >> 8) & 0xFF);
+        byte yL = (byte)(h & 0xFF);
+        byte yH = (byte)((h >> 8) & 0xFF);
+
+        Write(0x1D, 0x76, 0x30, (byte)mode, xL, xH, yL, yH);
+        _stream.Write(imageBytes, 0, expectedLen);
+        return this;
+    }
+
     // ─── Barcodes & 2D codes ─────────────────────────────────
 
     /// <summary>GS k — Print a 1D barcode.</summary>

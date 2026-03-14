@@ -35,7 +35,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Health check
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'running', version: '1.2.0', printers: printer.getPrinters().length });
+  res.json({ status: 'running', version: '1.3.0', printers: printer.getPrinters().length });
 });
 
 // Label presets
@@ -154,15 +154,21 @@ app.post('/api/print-escpos/:printerId', async (req, res) => {
 
     const s = p.settings || {};
     const encoder = new EscPosEncoder({ paperWidth: s.paperWidth });
-    for (let i = 0; i < copies; i++) {
-      for (const cmd of commands) {
-        const [method, ...args] = Array.isArray(cmd) ? cmd : [cmd];
-        if (typeof encoder[method] === 'function') {
+    let payload;
+    try {
+      for (let i = 0; i < copies; i++) {
+        for (const cmd of commands) {
+          const [method, ...args] = Array.isArray(cmd) ? cmd : [cmd];
+          if (typeof encoder[method] !== 'function') {
+            return res.status(400).json({ error: `Unknown ESC/POS command: ${method}` });
+          }
           encoder[method](...args);
         }
       }
+      payload = encoder.encode();
+    } catch (encErr) {
+      return res.status(400).json({ error: encErr.message });
     }
-    const payload = encoder.encode();
 
     let result;
     if (p.type === 'network') {
@@ -231,7 +237,7 @@ wss.on('connection', (ws) => {
 
       switch (action) {
         case 'status':
-          result = { status: 'running', version: '1.2.0', printers: printer.getPrinters().length };
+          result = { status: 'running', version: '1.3.0', printers: printer.getPrinters().length };
           break;
 
         case 'listPrinters':
@@ -308,7 +314,7 @@ if (require.main === module) {
   start().then(() => {
     console.log(`
   ╔══════════════════════════════════════════╗
-  ║          EDPrintTool v1.2.0              ║
+  ║          EDPrintTool v1.3.0              ║
   ╠══════════════════════════════════════════╣
   ║  Dashboard:  http://localhost:${PORT}       ║
   ║  REST API:   http://localhost:${PORT}/api   ║

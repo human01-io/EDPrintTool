@@ -330,6 +330,19 @@ public static class RawPrinter
             case "openCashDrawer":
                 enc.OpenCashDrawer(args.Count > 1 ? args[1]!.GetValue<int>() : 0);
                 break;
+            case "image":
+                if (args.Count > 1)
+                {
+                    var imgData = args[1]!.GetValue<string>();
+                    var imgOpts = args.Count > 2 && args[2] is JsonObject imgObj ? imgObj : null;
+                    var imgWidth = imgOpts?["width"]?.GetValue<int>() ?? 0;
+                    if (imgWidth <= 0)
+                        throw new ArgumentException("image: width is required and must be > 0");
+                    enc.Image(imgData, imgWidth,
+                        imgOpts?["height"]?.GetValue<int>(),
+                        imgOpts?["mode"]?.GetValue<int>() ?? 0);
+                }
+                break;
             case "barcode":
                 if (args.Count > 1)
                 {
