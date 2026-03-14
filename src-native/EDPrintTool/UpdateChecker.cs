@@ -6,7 +6,8 @@ namespace EDPrintTool;
 
 public static class UpdateChecker
 {
-    public const string CurrentVersion = "1.0.0";
+    public static readonly string CurrentVersion =
+        typeof(UpdateChecker).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
     private const string ReleasesUrl = "https://api.github.com/repos/human01-io/EDPrintTool/releases/latest";
 
     public static async Task CheckForUpdatesAsync()
