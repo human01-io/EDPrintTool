@@ -32,11 +32,13 @@ Every server feature exists in both Node.js and C#. When modifying behavior, bot
 | Concern | Node.js | C# |
 |---------|---------|-----|
 | HTTP/WS server | `src/server.js` | `HttpServer.cs` |
+| Action dispatcher | `src/actions.js` | (inline in `HttpServer.cs` + `RelayClient.cs`) |
 | Printer config & ZPL dispatch | `src/printer.js` | `PrinterStore.cs` |
 | ESC/POS encoder | `src/escpos.js` | `EscPosEncoder.cs` |
 | Printer profiles | `src/printer-profiles.js` | (inline in `EscPosEncoder.cs`) |
 | Raw printing (Win32) | PowerShell inline C# | `RawPrinter.cs` (P/Invoke winspool.drv) |
 | Printer discovery | PowerShell/`lpstat` | `PrinterDiscovery.cs` |
+| Relay client | `src/relay-client.js` | `RelayClient.cs` |
 
 ### Print Flow
 
@@ -45,6 +47,22 @@ Every server feature exists in both Node.js and C#. When modifying behavior, bot
 3. For ZPL: prepends setup commands (`^PW`, `^LL`, `^PR`, `~SD`, etc.) then sends raw bytes
 4. For ESC/POS: processes structured command array through encoder, wraps with init/cut sequences
 5. Sends to printer via TCP socket (network, port 9100) or OS print spooler (USB)
+
+### Cloud Relay
+
+Optional cloud relay (`relay/`) enables remote printing over the internet. Three actors:
+
+```
+[Web App] → HTTPS → [Cloud Relay] ← WSS ← [EDPrintTool + Printers]
+```
+
+- **Relay server** (`relay/server.js`) — standalone Node.js server, self-hostable (Railway, VPS, etc.). Routes print jobs by location ID. Admin API for managing locations, per-location API keys.
+- **Relay client** (`src/relay-client.js` / `RelayClient.cs`) — built into EDPrintTool. Connects outbound via WebSocket, auto-reconnects with exponential backoff. Configured via `relay.json` in config dir or env vars (`RELAY_URL`, `RELAY_LOCATION_ID`, `RELAY_API_KEY`).
+- **Client library** (`public/edprint.js`) — supports both local WebSocket mode and relay REST mode via constructor option `{ mode: 'relay' }`.
+
+The shared action dispatcher (`src/actions.js`) is used by both the local WebSocket handler and the relay client to avoid duplicating dispatch logic. The C# side duplicates the dispatch in `RelayClient.cs` (no shared module pattern in C#).
+
+Relay locations can be seeded from the `RELAY_LOCATIONS` env var (format: `id:apiKey:name,id2:apiKey2:name2`) to survive redeployments on ephemeral filesystems.
 
 ### ESC/POS Encoder
 
@@ -60,9 +78,11 @@ Lightweight capability declarations (`generic`, `epson`, `star`, `bixolon`, `cit
 
 ### Config Storage
 
-- Windows: `%APPDATA%\EDPrintTool\printers.json`
-- macOS: `~/Library/Application Support/EDPrintTool/printers.json`
-- Linux: `~/.edprinttool/printers.json`
+- Windows: `%APPDATA%\EDPrintTool\`
+- macOS: `~/Library/Application Support/EDPrintTool/`
+- Linux: `~/.edprinttool/`
+
+Files: `printers.json` (printer configs), `relay.json` (relay client config, optional)
 
 ## Versioning
 

@@ -14,6 +14,10 @@ EDPrintTool runs a lightweight local service (port 8189) that accepts print jobs
 - **No drivers needed** — sends raw bytes directly, bypassing print drivers entirely
 - **Printer profiles** — capability presets for Epson, Star, Bixolon, Citizen, and generic printers
 - **12 label presets** — common Zebra label sizes from 4x8 down to 1x0.5 (jewelry)
+- **Barcodes & QR codes** — CODE128, EAN13, UPC-A, QR codes, PDF417 via ESC/POS
+- **1-bit image printing** — raster images via ESC/POS `GS v 0`
+- **PDF document printing** — print PDFs through the OS spooler (USB printers)
+- **Cloud relay** — print remotely over the internet via a self-hosted relay server
 
 ## Quick Start
 
@@ -295,6 +299,109 @@ Prints a **1-bit monochrome raster image** using `GS v 0`. The data must be raw 
 | `width` | `3` | Module width (2–8) |
 | `height` | `3` | Row height (2–8) |
 | `errorCorrection` | `1` | Error correction level (0–8) |
+
+## Cloud Relay (Remote Printing)
+
+EDPrintTool can print over the internet via a self-hosted cloud relay. The relay routes print jobs from your web app to EDPrintTool instances running at remote locations.
+
+```
+[Web App] → HTTPS → [Cloud Relay] ← WSS ← [EDPrintTool @ Store A]
+                                   ← WSS ← [EDPrintTool @ Store B]
+```
+
+EDPrintTool connects **outbound** to the relay — no port forwarding or firewall changes needed.
+
+### 1. Deploy the Relay
+
+The relay server lives in `relay/`. Deploy to any Node.js host (Railway, Render, VPS):
+
+```bash
+cd relay
+npm install
+RELAY_ADMIN_KEY=your-secret npm start
+```
+
+Or deploy from GitHub — set root directory to `relay` and add `RELAY_ADMIN_KEY` as an env var.
+
+### 2. Register a Location
+
+```bash
+curl -X POST https://your-relay.example.com/api/locations \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: your-secret" \
+  -d '{"name": "Store A", "locationId": "store-a"}'
+```
+
+Returns `{ "locationId": "store-a", "apiKey": "generated-key" }`.
+
+To persist locations across redeployments (ephemeral filesystems), set the `RELAY_LOCATIONS` env var:
+
+```
+RELAY_LOCATIONS=store-a:apikey123:Store A,store-b:apikey456:Store B
+```
+
+### 3. Connect EDPrintTool
+
+Create `relay.json` in the config directory:
+
+- **Windows:** `%APPDATA%\EDPrintTool\relay.json`
+- **macOS:** `~/Library/Application Support/EDPrintTool/relay.json`
+- **Linux:** `~/.edprinttool/relay.json`
+
+```json
+{
+  "enabled": true,
+  "relayUrl": "wss://your-relay.example.com/ws/connect",
+  "locationId": "store-a",
+  "apiKey": "generated-key"
+}
+```
+
+Start EDPrintTool normally (Node.js or Windows exe). It connects to the relay while still serving localhost:8189.
+
+### 4. Print via the Relay
+
+```js
+// JavaScript client library (relay mode)
+const ep = new EDPrint({
+  mode: 'relay',
+  relayUrl: 'https://your-relay.example.com',
+  locationId: 'store-a',
+  apiKey: 'generated-key',
+});
+await ep.print('my-printer', '^XA^FO50,50^ADN,36,20^FDHello^FS^XZ');
+
+// Or plain fetch
+fetch('https://your-relay.example.com/api/locations/store-a/print/my-printer', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-API-Key': 'generated-key' },
+  body: JSON.stringify({ zpl: '^XA...^XZ', copies: 1 })
+});
+```
+
+### Relay API Reference
+
+**Admin endpoints** (require `X-Admin-Key` header):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/status` | Relay status, location count, connected count |
+| `POST` | `/api/locations` | Register a location |
+| `GET` | `/api/locations` | List all locations with online status |
+| `DELETE` | `/api/locations/:id` | Remove a location |
+
+**Print endpoints** (require `X-API-Key` header):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/locations/:id/status` | EDPrintTool status at location |
+| `GET` | `/api/locations/:id/printers` | List printers at location |
+| `POST` | `/api/locations/:id/print/:printerId` | Print ZPL |
+| `POST` | `/api/locations/:id/print-escpos/:printerId` | Print ESC/POS |
+| `POST` | `/api/locations/:id/print-document/:printerId` | Print PDF |
+| `POST` | `/api/locations/:id/print-raw` | Quick print to IP:port |
+
+See [`relay/README.md`](relay/README.md) for full deployment and configuration docs.
 
 ## Windows Desktop App
 

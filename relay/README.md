@@ -121,10 +121,21 @@ fetch('https://relay.example.com/api/locations/store-a/print/my-printer', {
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RELAY_PORT` | `8190` | HTTP/WS listen port |
+| `RELAY_PORT` | `8190` | HTTP/WS listen port (also reads `PORT` for Railway/Render) |
 | `RELAY_ADMIN_KEY` | *(required)* | Admin API key |
 | `RELAY_DATA_DIR` | `./data` | Directory for `locations.json` |
 | `RELAY_JOB_TIMEOUT` | `30000` | Ms to wait for print result |
+| `RELAY_LOCATIONS` | *(optional)* | Seed locations on startup (survives ephemeral filesystems) |
+
+### RELAY_LOCATIONS format
+
+Pre-register locations via env var so they persist across redeployments on platforms with ephemeral filesystems (Railway, Render, etc.):
+
+```
+RELAY_LOCATIONS=store-a:apikey123:Store A,store-b:apikey456:Store B
+```
+
+Format: `locationId:apiKey:name` — comma-separated for multiple locations. Locations registered via the Admin API are also saved to `locations.json` but may be lost on redeploy without persistent storage.
 
 ## Deployment
 
