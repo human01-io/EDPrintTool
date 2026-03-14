@@ -3,7 +3,7 @@
   "info": {
     "title": "EDPrintTool API",
     "description": "REST API for sending raw ZPL and ESC/POS commands to thermal printers. Free QZ Tray alternative.",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "license": {
       "name": "MIT"
     }
@@ -367,16 +367,19 @@
                   ["initialize"],
                   ["align", "center"],
                   ["bold", true],
-                  ["line", "MY STORE"],
+                  ["textSize", 1, 2],
+                  ["line", "MI TIENDA"],
+                  ["textSize", 1, 1],
                   ["bold", false],
-                  ["rule"],
+                  ["rule", "="],
                   ["align", "left"],
-                  ["line", "Item              Qty   Price"],
-                  ["line", "Widget A           2    $9.99"],
+                  ["columns", ["Widget A", "2", "$9.99"]],
+                  ["columns", ["Widget B", "1", "$4.50"]],
                   ["rule"],
-                  ["align", "right"],
+                  ["pair", "Subtotal", "$14.49"],
                   ["bold", true],
-                  ["line", "TOTAL: $9.99"],
+                  ["pair", "TOTAL", "$16.81"],
+                  ["bold", false],
                   ["cut", "partial", 4]
                 ],
                 "copies": 1
@@ -539,7 +542,7 @@
           "orientation": { "type": "string", "enum": ["N", "R", "I", "B"], "description": "N=normal, R=rotated, I=inverted, B=bottom-up", "default": "N" },
           "mediaType": { "type": "string", "enum": ["T", "D"], "description": "T=thermal transfer, D=direct thermal", "default": "T" },
           "printMode": { "type": "string", "enum": ["T", "P", "C"], "description": "T=tear-off, P=peel-off, C=cutter", "default": "T" },
-          "codepage": { "type": "string", "enum": ["", "cp437", "cp850", "cp858", "cp860", "cp863", "cp865", "cp1252"], "description": "Code page (empty string = printer default)", "default": "" },
+          "codepage": { "type": "string", "enum": ["", "cp437", "cp850", "cp858", "cp860", "cp863", "cp865", "cp1252"], "description": "Code page for text encoding. Default cp1252 supports Spanish/Western European characters (á é í ó ú ñ ¡ ¿).", "default": "cp1252" },
           "printerProfile": { "type": "string", "enum": ["generic", "epson", "star", "bixolon", "citizen", "custom"], "description": "ESC/POS printer capability profile", "default": "generic" },
           "paperWidth": { "type": "string", "enum": ["80mm", "58mm"], "description": "ESC/POS paper width", "default": "80mm" },
           "autoCut": { "type": "boolean", "description": "Send cut command after ESC/POS print", "default": true },
@@ -601,7 +604,7 @@
             "description": "Array of ESC/POS commands. Each command is `[method, ...args]`.",
             "items": {
               "type": "array",
-              "description": "Command as [method, ...args]. Available methods: initialize, line, raw, bold, underline, align, font, size, rule, columns, feed, cut, cashDrawer, codepage",
+              "description": "Command as [method, ...args]. Available methods: initialize, codepage, line, text, raw, newline, empty, bold, underline, align, font, textSize, invert, rule, columns, pair, feed, cut, openCashDrawer",
               "items": {},
               "example": ["line", "Hello World"]
             }

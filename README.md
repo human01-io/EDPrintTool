@@ -77,12 +77,21 @@ fetch('http://localhost:8189/api/print-escpos/my-printer-id', {
       ["initialize"],
       ["align", "center"],
       ["bold", true],
-      ["line", "MY STORE"],
+      ["textSize", 1, 2],
+      ["line", "MI TIENDA"],
+      ["textSize", 1, 1],
       ["bold", false],
-      ["rule"],
+      ["line", "RFC: XAXX010101000"],
+      ["rule", "="],
       ["align", "left"],
-      ["line", "Item              Qty   Price"],
-      ["line", "Widget A           2    $9.99"],
+      ["columns", ["Widget A", "2", "$9.99"]],
+      ["columns", ["Widget B", "1", "$4.50"]],
+      ["rule"],
+      ["pair", "Subtotal", "$14.49"],
+      ["pair", "IVA 16%", "$2.32"],
+      ["bold", true],
+      ["pair", "TOTAL", "$16.81"],
+      ["bold", false],
       ["cut", "partial", 4]
     ]
   })
@@ -159,8 +168,24 @@ Responses include the `requestId` for correlation:
 | `autoCut` | `true` | Send cut command after print |
 | `cutType` | `partial` | `partial` or `full` cut |
 | `feedLines` | `4` | Lines to feed before cutting |
-| `codepage` | _(default)_ | Code page: cp437, cp850, cp858, cp860, cp863, cp865, cp1252 |
+| `codepage` | `cp1252` | Code page: cp437, cp850, cp858, cp860, cp863, cp865, cp1252 |
 | `printerProfile` | `generic` | Printer capability profile |
+
+## Character Encoding
+
+ESC/POS printers use single-byte codepages, not UTF-8. EDPrintTool defaults to **cp1252** (Windows Latin 1) which supports all Western European and Spanish characters: á é í ó ú ñ ü ¡ ¿.
+
+You can change the codepage per-printer in settings, or per-job with the `codepage` command. The encoder automatically converts text to the correct single-byte encoding.
+
+| Codepage | ESC/POS ID | Coverage |
+|----------|------------|----------|
+| `cp1252` | 16 | **Default.** Western European, Spanish, Portuguese, French, German |
+| `cp437` | 0 | US ASCII + box-drawing characters |
+| `cp850` | 2 | Multilingual Latin I |
+| `cp858` | 19 | Latin I + Euro sign (€) |
+| `cp860` | 3 | Portuguese |
+| `cp863` | 4 | Canadian French |
+| `cp865` | 5 | Nordic |
 
 ## ESC/POS Commands
 
@@ -169,19 +194,24 @@ The ESC/POS endpoint accepts an array of commands, each as `[method, ...args]`:
 | Command | Args | Description |
 |---------|------|-------------|
 | `initialize` | — | Reset printer |
+| `codepage` | `name` | Set code page (e.g. `"cp1252"`) |
 | `line` | `text` | Print text + line feed |
-| `raw` | `text` | Print text without line feed |
+| `text` | `text` | Print text without line feed |
+| `raw` | `text` | Print pre-formatted text |
+| `newline` | — | Print empty line |
+| `empty` | — | Print empty line (alias) |
 | `bold` | `true/false` | Toggle bold |
-| `underline` | `true/false` | Toggle underline |
+| `underline` | `0/1/2` | Underline off / thin / thick |
 | `align` | `left/center/right` | Set alignment |
-| `font` | `A/B` | Select font |
-| `size` | `width, height` | Text size multiplier (1–8) |
-| `rule` | `[char]` | Print horizontal rule |
+| `font` | `0/1` | Select font (0=Font A 12x24, 1=Font B 9x17) |
+| `textSize` | `width, height` | Text size multiplier (1–8) |
+| `invert` | `true/false` | Reverse (white on black) |
+| `rule` | `[char]` | Print horizontal rule (default `"-"`) |
 | `columns` | `[col1, col2, ...]` | Print columns across page width |
+| `pair` | `left, right, [fill]` | Key-value with dot fill (e.g. `Subtotal......$9.99`) |
 | `feed` | `[lines]` | Feed paper |
-| `cut` | `[type, feedLines]` | Cut paper |
-| `cashDrawer` | `[pin]` | Open cash drawer |
-| `codepage` | `name` | Set code page |
+| `cut` | `[type, feedLines]` | Cut paper (`"partial"` or `"full"`) |
+| `openCashDrawer` | `[pin]` | Open cash drawer (0=pin 2, 1=pin 5) |
 
 ## Windows Desktop App
 
