@@ -28,6 +28,12 @@ npm start
 
 Open http://localhost:8189 to access the dashboard. Add a printer, configure its settings, and print a test page.
 
+## Local vs Relay Mode
+
+**Local mode** (`ws://localhost:8189`) works great for same-machine printing, but modern browsers (Chrome, Edge) will show a "connect to devices on your local network" permission prompt when your HTTPS web app connects to localhost. This is a [Chrome Private Network Access](https://developer.chrome.com/blog/local-network-access) security feature that cannot be bypassed — even QZ Tray faces the same limitation.
+
+**Relay mode** eliminates this entirely. Your web app talks to the relay over HTTPS (a public domain), so no local network access is needed — no browser prompts, no firewall issues, and it works from anywhere. See [Cloud Relay](#cloud-relay-remote-printing) below.
+
 ## Integration
 
 ### JavaScript Client (WebSocket)
