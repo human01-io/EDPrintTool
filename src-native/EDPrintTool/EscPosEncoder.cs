@@ -7,11 +7,16 @@ namespace EDPrintTool;
 /// Architecture follows ReceiptPrinterEncoder / node-thermal-printer patterns:
 ///   1. Encoder builds a byte buffer (no I/O)
 ///   2. Transport layer sends it (RawPrinter handles that)
+///
+/// Text is encoded using the active codepage (default cp1252 for Latin/Spanish).
+/// ESC/POS printers use single-byte encodings — sending UTF-8 directly causes
+/// multi-byte characters (é, ñ, í) to print as garbage.
 /// </summary>
 public class EscPosEncoder
 {
     private readonly MemoryStream _stream = new();
     private readonly int _columns;
+    private Encoding _encoding;
 
     // Paper width → default character columns (Font A, 12x24)
     public static readonly Dictionary<string, int> ColumnsByWidth = new()
@@ -20,16 +25,16 @@ public class EscPosEncoder
         ["58mm"] = 32,
     };
 
-    // Common code pages: name → ESC t argument
-    public static readonly Dictionary<string, byte> Codepages = new()
+    // Common code pages: name → (ESC t argument, .NET codepage number)
+    public static readonly Dictionary<string, (byte escArg, int dotnetCp)> Codepages = new()
     {
-        ["cp437"] = 0,   // US (default)
-        ["cp850"] = 2,   // Multilingual Latin I
-        ["cp858"] = 19,  // Latin I + Euro
-        ["cp860"] = 3,   // Portuguese
-        ["cp863"] = 4,   // Canadian French
-        ["cp865"] = 5,   // Nordic
-        ["cp1252"] = 16, // Windows Latin 1
+        ["cp437"]  = (0,  437),   // US (default)
+        ["cp850"]  = (2,  850),   // Multilingual Latin I
+        ["cp858"]  = (19, 858),   // Latin I + Euro
+        ["cp860"]  = (3,  860),   // Portuguese
+        ["cp863"]  = (4,  863),   // Canadian French
+        ["cp865"]  = (5,  865),   // Nordic
+        ["cp1252"] = (16, 1252),  // Windows Latin 1 (best for Spanish)
     };
 
     public int ColumnWidth => _columns;
@@ -37,6 +42,16 @@ public class EscPosEncoder
     public EscPosEncoder(string paperWidth = "80mm", int? columns = null, string? codepage = null)
     {
         _columns = columns ?? (ColumnsByWidth.TryGetValue(paperWidth, out var c) ? c : 48);
+
+        // Register codepage providers for .NET (required for non-UTF encodings)
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        // Default to cp1252 (Windows Latin 1) — covers all Western European/Spanish chars
+        var cpName = codepage ?? "cp1252";
+        if (Codepages.TryGetValue(cpName, out var info))
+            _encoding = Encoding.GetEncoding(info.dotnetCp);
+        else
+            _encoding = Encoding.GetEncoding(1252);
     }
 
     // ─── Printer control ──────────────────────────────────────
@@ -44,17 +59,23 @@ public class EscPosEncoder
     /// <summary>ESC @ — Reset printer to defaults.</summary>
     public EscPosEncoder Initialize()
     {
-        // Only ESC @ — the safest init. Extra commands can cause errors on
-        // printers with limited ESC/POS support like Star TSP100 in emulation mode.
         Write(0x1B, 0x40);
         return this;
     }
 
-    /// <summary>ESC t n — Select character code page.</summary>
+    /// <summary>ESC t n — Select character code page on the printer and update encoder.</summary>
     public EscPosEncoder Codepage(string name)
     {
-        var n = Codepages.TryGetValue(name, out var v) ? v : (byte)0;
-        Write(0x1B, 0x74, n);
+        if (Codepages.TryGetValue(name, out var info))
+        {
+            Write(0x1B, 0x74, info.escArg);
+            _encoding = Encoding.GetEncoding(info.dotnetCp);
+        }
+        else
+        {
+            Write(0x1B, 0x74, 0);
+            _encoding = Encoding.GetEncoding(437);
+        }
         return this;
     }
 
@@ -117,14 +138,14 @@ public class EscPosEncoder
     /// <summary>Write text without newline.</summary>
     public EscPosEncoder Text(string str)
     {
-        _stream.Write(Encoding.UTF8.GetBytes(str));
+        WriteText(str);
         return this;
     }
 
     /// <summary>Write text followed by newline.</summary>
     public EscPosEncoder Line(string str)
     {
-        _stream.Write(Encoding.UTF8.GetBytes(str + "\n"));
+        WriteText(str + "\n");
         return this;
     }
 
@@ -135,10 +156,10 @@ public class EscPosEncoder
         return this;
     }
 
-    /// <summary>Write pre-formatted content (string). For raw receipt text from API.</summary>
+    /// <summary>Write pre-formatted content (string).</summary>
     public EscPosEncoder Raw(string content)
     {
-        _stream.Write(Encoding.UTF8.GetBytes(content));
+        WriteText(content);
         return this;
     }
 
@@ -152,7 +173,7 @@ public class EscPosEncoder
     /// <summary>Print a horizontal rule filling the full paper width.</summary>
     public EscPosEncoder Rule(char ch = '-')
     {
-        _stream.Write(Encoding.UTF8.GetBytes(new string(ch, _columns) + "\n"));
+        WriteText(new string(ch, _columns) + "\n");
         return this;
     }
 
@@ -181,7 +202,7 @@ public class EscPosEncoder
                 sb.Append(val.Length >= w ? val[..w] : val.PadRight(w));
         }
 
-        _stream.Write(Encoding.UTF8.GetBytes(sb + "\n"));
+        WriteText(sb + "\n");
         return this;
     }
 
@@ -193,7 +214,7 @@ public class EscPosEncoder
     {
         int gap = _columns - left.Length - right.Length;
         string middle = gap > 0 ? new string(fill, gap) : " ";
-        _stream.Write(Encoding.UTF8.GetBytes(left + middle + right + "\n"));
+        WriteText(left + middle + right + "\n");
         return this;
     }
 
@@ -250,4 +271,14 @@ public class EscPosEncoder
     // ─── Private ────────────────────────────────────────────
 
     private void Write(params byte[] data) => _stream.Write(data);
+
+    /// <summary>
+    /// Write text using the active codepage encoding.
+    /// This ensures characters like é, ñ, í are encoded as single bytes
+    /// that match what the printer expects for its selected codepage.
+    /// </summary>
+    private void WriteText(string text)
+    {
+        _stream.Write(_encoding.GetBytes(text));
+    }
 }

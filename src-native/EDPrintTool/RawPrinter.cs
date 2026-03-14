@@ -240,9 +240,13 @@ public static class RawPrinter
     /// Build ESC/POS payload from structured command array.
     /// Each command is a JSON array: ["method", arg1, arg2, ...]
     /// </summary>
-    public static byte[] BuildFromCommands(string paperWidth, JsonArray commands, int copies = 1)
+    public static byte[] BuildFromCommands(string paperWidth, JsonArray commands, int copies = 1, string? codepage = null)
     {
-        var encoder = new EscPosEncoder(paperWidth);
+        // Default to cp1252 for Latin/Spanish character support
+        var encoder = new EscPosEncoder(paperWidth, codepage: codepage ?? "cp1252");
+        // Tell the printer to use the same codepage
+        encoder.Codepage(codepage ?? "cp1252");
+
         for (int i = 0; i < copies; i++)
         {
             foreach (var cmdNode in commands)

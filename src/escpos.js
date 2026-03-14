@@ -5,6 +5,12 @@
  *   1. Encoder builds a byte buffer (no I/O)
  *   2. Transport layer sends it (printer.js handles that)
  *
+ * Text is encoded using 'latin1' (ISO-8859-1) by default, which matches
+ * cp1252 for all printable characters. This ensures accented characters
+ * like é, ñ, í are sent as single bytes that match the printer's codepage.
+ * Sending UTF-8 would produce multi-byte sequences that thermal printers
+ * cannot interpret.
+ *
  * Usage:
  *   const data = new EscPosEncoder({ columns: 48 })
  *     .initialize()
@@ -45,6 +51,9 @@ class EscPosEncoder {
     this._parts = [];
     this._columns = options.columns || COLUMNS[options.paperWidth] || 48;
     this._codepage = options.codepage || null;
+    // Use latin1 encoding — maps 1:1 to the lower 256 Unicode codepoints
+    // which covers all cp1252/ISO-8859-1 printable characters (á, é, ñ, etc.)
+    this._textEncoding = 'latin1';
   }
 
   // ─── Printer control ──────────────────────────────────────
@@ -123,13 +132,13 @@ class EscPosEncoder {
 
   /** Write text without newline */
   text(str) {
-    this._parts.push(Buffer.from(str, 'utf8'));
+    this._parts.push(Buffer.from(str, this._textEncoding));
     return this;
   }
 
   /** Write text followed by newline */
   line(str) {
-    this._parts.push(Buffer.from(str + '\n', 'utf8'));
+    this._parts.push(Buffer.from(str + '\n', this._textEncoding));
     return this;
   }
 
@@ -147,14 +156,14 @@ class EscPosEncoder {
     if (Buffer.isBuffer(content)) {
       this._parts.push(content);
     } else {
-      this._parts.push(Buffer.from(content, 'utf8'));
+      this._parts.push(Buffer.from(content, this._textEncoding));
     }
     return this;
   }
 
   /** Print a horizontal rule filling the full paper width */
   rule(char = '-') {
-    this._parts.push(Buffer.from(char[0].repeat(this._columns) + '\n', 'utf8'));
+    this._parts.push(Buffer.from(char[0].repeat(this._columns) + '\n', this._textEncoding));
     return this;
   }
 
@@ -193,7 +202,7 @@ class EscPosEncoder {
       }
     }
 
-    this._parts.push(Buffer.from(row + '\n', 'utf8'));
+    this._parts.push(Buffer.from(row + '\n', this._textEncoding));
     return this;
   }
 
@@ -204,7 +213,7 @@ class EscPosEncoder {
   pair(left, right, fill = '.') {
     const gap = this._columns - left.length - right.length;
     const middle = gap > 0 ? fill[0].repeat(gap) : ' ';
-    this._parts.push(Buffer.from(left + middle + right + '\n', 'utf8'));
+    this._parts.push(Buffer.from(left + middle + right + '\n', this._textEncoding));
     return this;
   }
 
