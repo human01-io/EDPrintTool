@@ -229,6 +229,8 @@ app.post('/api/print-raw', async (req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
+const { dispatch } = require('./actions');
+
 wss.on('connection', (ws) => {
   console.log('[WS] Client connected');
 
@@ -241,66 +243,9 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    const { action } = msg;
     const requestId = msg.requestId || null;
-
     try {
-      let result;
-
-      switch (action) {
-        case 'status':
-          result = { status: 'running', version: VERSION, printers: printer.getPrinters().length };
-          break;
-
-        case 'listPrinters':
-          result = printer.getPrinters();
-          break;
-
-        case 'getLabelPresets':
-          result = printer.getLabelPresets();
-          break;
-
-        case 'discoverPrinters':
-          result = await printer.discoverPrinters();
-          break;
-
-        case 'addPrinter':
-          result = printer.addPrinter(msg.printer);
-          break;
-
-        case 'updateSettings':
-          if (!msg.printerId) throw new Error('Missing printerId');
-          result = printer.updatePrinterSettings(msg.printerId, msg.settings || {});
-          break;
-
-        case 'removePrinter':
-          result = { removed: printer.removePrinter(msg.printerId) };
-          break;
-
-        case 'print':
-          if (!msg.printerId || !msg.zpl) throw new Error('Missing printerId or zpl');
-          result = await printer.print(msg.printerId, msg.zpl, {
-            copies: msg.copies || 1,
-            applySettings: msg.applySettings !== false,
-          });
-          break;
-
-        case 'printRaw':
-          if (!msg.host || !msg.zpl) throw new Error('Missing host or zpl');
-          result = await printer.printNetwork(msg.host, msg.port || 9100, msg.zpl);
-          break;
-
-        case 'printDocument':
-          if (!msg.printerId || !msg.file) throw new Error('Missing printerId or file');
-          result = await printer.printDocument(msg.printerId, msg.file, {
-            copies: msg.copies || 1,
-          });
-          break;
-
-        default:
-          throw new Error(`Unknown action: ${action}`);
-      }
-
+      const result = await dispatch(msg);
       ws.send(JSON.stringify({ requestId, success: true, data: result }));
     } catch (err) {
       ws.send(JSON.stringify({ requestId, success: false, error: err.message }));
@@ -333,6 +278,9 @@ if (require.main === module) {
   ║  WebSocket:  ws://localhost:${PORT}         ║
   ╚══════════════════════════════════════════╝
     `);
+    // Start relay client if configured (runs alongside local server)
+    const { startRelayClient } = require('./relay-client');
+    startRelayClient();
   }).catch((err) => {
     console.error('Failed to start server:', err.message);
     process.exit(1);

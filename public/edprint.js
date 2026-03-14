@@ -1,53 +1,75 @@
 /**
- * EDPrintTool Client Library v1.0
+ * EDPrintTool Client Library v2.0
  *
- * Drop-in JavaScript client for web apps to print ZPL to Zebra printers
- * via the EDPrintTool local service.
+ * Drop-in JavaScript client for web apps to print ZPL/ESC-POS to thermal printers
+ * via EDPrintTool — supports both local (WebSocket) and cloud relay (REST) modes.
  *
- * === QUICK START (WebSocket) ===
+ * === LOCAL MODE (WebSocket to localhost) ===
  *
- *   <script src="http://localhost:8189/edprint.js"></script>
- *   <script>
- *     const ep = new EDPrint();
- *     await ep.connect();
+ *   const ep = new EDPrint();
+ *   await ep.connect();
+ *   const printers = await ep.listPrinters();
+ *   await ep.print('my-printer', '^XA^FO50,50^ADN,36,20^FDHello^FS^XZ');
  *
- *     // List printers configured in the dashboard
- *     const printers = await ep.listPrinters();
- *     console.log(printers);
+ * === RELAY MODE (REST to cloud relay) ===
  *
- *     // Print a label
- *     await ep.print('my-printer-id', '^XA^FO50,50^ADN,36,20^FDHello^FS^XZ');
- *
- *     // Print 3 copies
- *     await ep.print('my-printer-id', zpl, { copies: 3 });
- *
- *     // Print without applying saved printer settings (raw passthrough)
- *     await ep.print('my-printer-id', zpl, { applySettings: false });
- *   </script>
- *
- * === QUICK START (REST API — no library needed) ===
- *
- *   // Print via fetch
- *   fetch('http://localhost:8189/api/print/my-printer-id', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({
- *       zpl: '^XA^FO50,50^ADN,36,20^FDHello^FS^XZ',
- *       copies: 1
- *     })
+ *   const ep = new EDPrint({
+ *     mode: 'relay',
+ *     relayUrl: 'https://relay.example.com',
+ *     locationId: 'store-42',
+ *     apiKey: 'your-api-key',
  *   });
+ *   // No connect() needed — uses fetch()
+ *   const printers = await ep.listPrinters();
+ *   await ep.print('my-printer', '^XA...^XZ');
  */
 class EDPrint {
-  constructor(url = 'ws://localhost:8189') {
-    this.url = url;
+  constructor(urlOrOptions = 'ws://localhost:8189') {
+    if (typeof urlOrOptions === 'string') {
+      // Local WebSocket mode (backward compatible)
+      this._mode = 'local';
+      this.url = urlOrOptions;
+    } else {
+      const opts = urlOrOptions;
+      this._mode = opts.mode || 'local';
+      if (this._mode === 'relay') {
+        this._relayUrl = (opts.relayUrl || '').replace(/\/$/, '');
+        this._locationId = opts.locationId;
+        this._apiKey = opts.apiKey;
+        if (!this._relayUrl || !this._locationId || !this._apiKey) {
+          throw new Error('Relay mode requires relayUrl, locationId, and apiKey');
+        }
+      } else {
+        this.url = opts.url || 'ws://localhost:8189';
+      }
+    }
     this.ws = null;
     this._requestId = 0;
     this._pending = new Map();
     this._listeners = { open: [], close: [], error: [], message: [] };
   }
 
-  /** Connect to the EDPrintTool server */
+  // ─── Relay mode helpers ──────────────────────────────────
+
+  /** @private REST call to relay server */
+  async _relay(method, path, body) {
+    const url = `${this._relayUrl}/api/locations/${encodeURIComponent(this._locationId)}${path}`;
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': this._apiKey },
+    };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  }
+
+  // ─── Connection (local mode only) ────────────────────────
+
+  /** Connect to the EDPrintTool server (local mode only, no-op in relay mode) */
   connect() {
+    if (this._mode === 'relay') return Promise.resolve();
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(this.url);
       this.ws.onopen = () => { this._emit('open'); resolve(); };
@@ -72,7 +94,7 @@ class EDPrint {
   /** Disconnect */
   disconnect() { if (this.ws) this.ws.close(); }
 
-  /** @private Send a command and wait for the response */
+  /** @private Send a command and wait for the response (local mode) */
   _send(payload) {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return reject(new Error('Not connected'));
@@ -82,11 +104,17 @@ class EDPrint {
     });
   }
 
+  // ─── API methods (work in both modes) ────────────────────
+
   /** Get server status */
-  status() { return this._send({ action: 'status' }); }
+  status() {
+    return this._mode === 'relay' ? this._relay('GET', '/status') : this._send({ action: 'status' });
+  }
 
   /** List configured printers (with their settings) */
-  listPrinters() { return this._send({ action: 'listPrinters' }); }
+  listPrinters() {
+    return this._mode === 'relay' ? this._relay('GET', '/printers') : this._send({ action: 'listPrinters' });
+  }
 
   /** Get available label size presets */
   getLabelPresets() { return this._send({ action: 'getLabelPresets' }); }
@@ -112,9 +140,7 @@ class EDPrint {
   /**
    * Update printer settings (label size, darkness, speed, etc.)
    * @param {string} printerId
-   * @param {object} settings - any of: labelPreset, widthDots, heightDots, dpi,
-   *                            darkness (0-30), speed (2-14), mediaType (D/T),
-   *                            printMode (T/P/C), orientation (N/R/I/B)
+   * @param {object} settings
    */
   updateSettings(printerId, settings) {
     return this._send({ action: 'updateSettings', printerId, settings });
@@ -130,21 +156,26 @@ class EDPrint {
    * @param {string} printerId
    * @param {string} zpl - raw ZPL code
    * @param {object} [options]
-   * @param {number} [options.copies=1] - number of copies
-   * @param {boolean} [options.applySettings=true] - prepend printer setup ZPL
+   * @param {number} [options.copies=1]
+   * @param {boolean} [options.applySettings=true]
    */
   print(printerId, zpl, options = {}) {
+    if (this._mode === 'relay') {
+      return this._relay('POST', `/print/${encodeURIComponent(printerId)}`, {
+        zpl, copies: options.copies || 1, applySettings: options.applySettings !== false,
+      });
+    }
     return this._send({
-      action: 'print',
-      printerId,
-      zpl,
-      copies: options.copies || 1,
-      applySettings: options.applySettings !== false,
+      action: 'print', printerId, zpl,
+      copies: options.copies || 1, applySettings: options.applySettings !== false,
     });
   }
 
   /** Quick print — send ZPL directly to an IP:port (no saved printer needed) */
   printRaw(host, zpl, port = 9100) {
+    if (this._mode === 'relay') {
+      return this._relay('POST', '/print-raw', { host, port, zpl });
+    }
     return this._send({ action: 'printRaw', host, port, zpl });
   }
 
@@ -156,11 +187,13 @@ class EDPrint {
    * @param {number} [options.copies=1]
    */
   printDocument(printerId, fileBase64, options = {}) {
+    if (this._mode === 'relay') {
+      return this._relay('POST', `/print-document/${encodeURIComponent(printerId)}`, {
+        file: fileBase64, copies: options.copies || 1,
+      });
+    }
     return this._send({
-      action: 'printDocument',
-      printerId,
-      file: fileBase64,
-      copies: options.copies || 1,
+      action: 'printDocument', printerId, file: fileBase64, copies: options.copies || 1,
     });
   }
 

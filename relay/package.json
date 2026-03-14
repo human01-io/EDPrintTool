@@ -1,0 +1,15 @@
+{
+  "name": "edprinttool-relay",
+  "version": "1.0.0",
+  "description": "Cloud relay server for EDPrintTool — routes print jobs to remote EDPrintTool instances",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["edprinttool", "print", "relay", "cloud"],
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}

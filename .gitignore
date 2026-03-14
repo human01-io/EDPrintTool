@@ -11,3 +11,10 @@ src-tauri/target/
 src-native/EDPrintTool/bin/
 src-native/EDPrintTool/obj/
 publish/
+
+# Relay server data
+relay/data/
+relay/node_modules/
+
+# Relay client config (contains API keys)
+relay.json
