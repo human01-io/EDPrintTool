@@ -44,13 +44,32 @@ function saveLocations() {
 }
 
 function loadLocations() {
+  // 1. Seed from RELAY_LOCATIONS env var (survives redeployments on ephemeral filesystems)
+  //    Format: "locationId:apiKey:name,locationId2:apiKey2:name2"
+  const envLocations = process.env.RELAY_LOCATIONS || '';
+  if (envLocations) {
+    for (const entry of envLocations.split(',')) {
+      const [id, apiKey, ...nameParts] = entry.trim().split(':');
+      if (id && apiKey) {
+        const name = nameParts.join(':') || id;
+        if (!locations.has(id)) {
+          locations.set(id, { apiKey, name, createdAt: new Date().toISOString() });
+        }
+      }
+    }
+    if (locations.size > 0) {
+      console.log(`[Relay] Seeded ${locations.size} location(s) from RELAY_LOCATIONS`);
+    }
+  }
+
+  // 2. Load from locations.json (may add more or override)
   try {
     if (fs.existsSync(LOCATIONS_PATH)) {
       const data = JSON.parse(fs.readFileSync(LOCATIONS_PATH, 'utf8'));
       for (const loc of data) {
         locations.set(loc.id, { apiKey: loc.apiKey, name: loc.name, createdAt: loc.createdAt });
       }
-      console.log(`[Relay] Loaded ${locations.size} location(s)`);
+      console.log(`[Relay] Loaded ${locations.size} location(s) from file`);
     }
   } catch (err) {
     console.error('[Relay] Failed to load locations:', err.message);
