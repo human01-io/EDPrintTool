@@ -10,6 +10,6 @@
   "keywords": ["edprinttool", "print", "relay", "cloud"],
   "license": "MIT",
   "dependencies": {
-    "ws": "^8.19.0"
+    "ws": "^8.22.0"
   }
 }
